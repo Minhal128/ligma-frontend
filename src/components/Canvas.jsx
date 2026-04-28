@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Tldraw } from 'tldraw';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Tldraw, createShapeId } from 'tldraw';
 import 'tldraw/tldraw.css';
 import * as Y from 'yjs';
 import CursorOverlay from './CursorOverlay.jsx';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const API_URL = (() => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
@@ -42,7 +46,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     const ydoc = ydocRef.current;
     const yArray = ydoc.getArray('shapes');
 
-    // Observe Yjs array changes and apply to tldraw store
     const observeY = (event) => {
       suppressOutRef.current = true;
       event.changes.delta.forEach((d) => {
@@ -70,7 +73,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     };
     yArray.observe(observeY);
 
-    // Listen to tldraw store changes and forward to Yjs
     const unsubscribe = editor.store.listen((entry) => {
       if (suppressOutRef.current) return;
       const changes = [];
@@ -90,14 +92,12 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       }
     });
 
-    // Cursor tracking
     const handlePointerMove = () => {
       const screen = editor.inputs.currentScreenPoint;
       onCursorMove(screen.x, screen.y);
     };
     window.addEventListener('pointermove', handlePointerMove);
 
-    // Context menu for ACL
     const handleContextMenu = (e) => {
       e.preventDefault();
       const hovered = editor.getHoveredShapes ? editor.getHoveredShapes() : new Set();
@@ -119,7 +119,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     };
   }, [roomId, sendMessage, onCursorMove]);
 
-  // Apply incoming Yjs updates and other WS messages
   useEffect(() => {
     if (!addListener) return;
     return addListener((msg) => {
@@ -130,6 +129,70 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         } catch (e) {
           console.error('Yjs apply error', e);
         }
+      }
+      if (msg.type === 'canvas_agent_actions' && editorRef.current) {
+        const editor = editorRef.current;
+        msg.actions.forEach(act => {
+          if (act.type === 'create') {
+            const id = createShapeId();
+            editor.createShape({
+              id,
+              type: act.shape === 'note' ? 'note' : 'geo',
+              x: act.x || 400,
+              y: act.y || 400,
+              props: {
+                text: act.content || '',
+                color: act.color || 'blue',
+                ...(act.shape === 'geo' ? { geo: act.props?.geo || 'rectangle' } : {})
+              }
+            });
+            // Select the new shape so subsequent "write" commands work
+            editor.select(id);
+          }
+          else if (act.type === 'modify') {
+            // Find target shape by description
+            const allShapes = editor.getCurrentPageShapes();
+            const selectedShapes = editor.getSelectedShapes();
+            const targetDesc = act.target?.toLowerCase();
+            
+            let target = null;
+            if (targetDesc) {
+              target = allShapes.find(s => {
+                const textMatch = s.props.text?.toLowerCase().includes(targetDesc);
+                const typeMatch = targetDesc.includes(s.type) || (targetDesc.includes('box') && s.props.geo === 'rectangle');
+                const colorMatch = targetDesc.includes(s.props.color);
+                return textMatch || (typeMatch && colorMatch) || typeMatch;
+              });
+            } else if (selectedShapes.length > 0) {
+              target = selectedShapes[0];
+            }
+
+            if (target) {
+              editor.updateShape({
+                id: target.id,
+                props: {
+                  ...target.props,
+                  ...(act.content ? { text: act.content } : {}),
+                  ...(act.color ? { color: act.color } : {})
+                }
+              });
+            }
+          }
+          else if (act.type === 'delete') {
+            const allShapes = editor.getCurrentPageShapes();
+            const selectedShapes = editor.getSelectedShapes();
+            const targetDesc = act.target?.toLowerCase();
+            
+            let target = null;
+            if (targetDesc) {
+              target = allShapes.find(s => s.props.text?.toLowerCase().includes(targetDesc));
+            } else if (selectedShapes.length > 0) {
+              target = selectedShapes[0];
+            }
+            
+            if (target) editor.deleteShape(target.id);
+          }
+        });
       }
       if (msg.type === 'cursor_update') {
         setCursors(prev => {
@@ -159,33 +222,58 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       />
       <CursorOverlay cursors={cursors} />
 
-      {showAclModal && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50">
-          <div className="bg-ligma-panel border border-ligma-deepblue/40 rounded-xl p-6 w-80 shadow-2xl">
-            <h3 className="text-white font-semibold mb-4">Set Permissions</h3>
-            <div className="space-y-3">
-              {['lead', 'contributor', 'viewer'].map(role => (
-                <div key={role} className="flex items-center justify-between">
-                  <span className="text-gray-300 text-sm capitalize">{role}</span>
-                  <select
-                    className="bg-ligma-bg border border-ligma-deepblue/40 rounded px-2 py-1 text-sm text-white"
-                    value={aclConfig[role]}
-                    onChange={e => setAclConfig(prev => ({ ...prev, [role]: e.target.value }))}
-                  >
-                    <option value="read">Read</option>
-                    <option value="comment">Comment</option>
-                    <option value="write">Write</option>
-                  </select>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={() => setShowAclModal(false)} className="flex-1 py-2 rounded-lg bg-gray-700 text-white text-sm">Cancel</button>
-              <button onClick={saveAcl} className="flex-1 py-2 rounded-lg bg-ligma-accent text-white text-sm font-semibold">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {showAclModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowAclModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Card className="glass-panel w-96 shadow-2xl border-primary/30">
+                <CardHeader>
+                  <CardTitle>Set Permissions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {['lead', 'contributor', 'viewer'].map(role => (
+                    <div key={role} className="flex items-center justify-between">
+                      <span className="text-sm font-medium capitalize">{role}</span>
+                      <Select
+                        value={aclConfig[role]}
+                        onValueChange={value => setAclConfig(prev => ({ ...prev, [role]: value }))}
+                      >
+                        <SelectTrigger className="w-32">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="read">Read</SelectItem>
+                          <SelectItem value="comment">Comment</SelectItem>
+                          <SelectItem value="write">Write</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
+                  <div className="flex gap-2 pt-4">
+                    <Button variant="outline" onClick={() => setShowAclModal(false)} className="flex-1">
+                      Cancel
+                    </Button>
+                    <Button onClick={saveAcl} className="flex-1">
+                      Save
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

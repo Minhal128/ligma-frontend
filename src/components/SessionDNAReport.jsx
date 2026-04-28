@@ -1,5 +1,11 @@
 import React, { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { FileText, X, Download, Copy, Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
 
 const API_URL = (() => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
@@ -78,133 +84,213 @@ ${(report.riskFlags || []).map(f => `- ⚠ ${f}`).join('\n') || 'None'}
 
   return (
     <>
-      <button
-        onClick={generate}
-        disabled={loading}
-        className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold border bg-ligma-panel border-ligma-deepblue/40 text-gray-300 hover:text-white transition"
-      >
-        {loading ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
-        DNA Report
-      </button>
+      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+        <Button
+          onClick={generate}
+          disabled={loading}
+          variant="secondary"
+          size="sm"
+          className="gap-2 glass-panel"
+        >
+          {loading ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />}
+          DNA Report
+        </Button>
+      </motion.div>
 
-      {open && report && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="bg-ligma-panel border border-ligma-deepblue/30 rounded-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl">
-            <div className="p-6 border-b border-ligma-deepblue/20 flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-bold text-white">Session DNA Report</h2>
-                <p className="text-xs text-gray-400 mt-1">{new Date().toLocaleDateString()} · {report.sessionDuration || 'N/A'} · {(report.participants || []).length} participants</p>
-              </div>
-              <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-white"><X size={18} /></button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Stats Row */}
-              <div className="grid grid-cols-4 gap-3">
-                <Stat label="Edits" value={report.totalEvents || 0} />
-                <Stat label="Tasks" value={report.actionItems?.length || 0} />
-                <Stat label="Decisions" value={(report.decisions || []).length} />
-                <Stat label="Conflicts" value={(report.conflictNodes || []).length} />
-              </div>
-
-              {/* Executive Summary */}
-              <Section title="Executive Summary">
-                <p className="text-sm text-gray-300 leading-relaxed">{report.executiveSummary || 'No summary available.'}</p>
-              </Section>
-
-              {/* Key Decisions */}
-              <Section title="Key Decisions">
-                <ul className="space-y-1">
-                  {(report.keyDecisions || []).map((d, i) => (
-                    <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
-                      <span className="text-ligma-accent mt-0.5">•</span>
-                      {d}
-                    </li>
-                  ))}
-                </ul>
-              </Section>
-
-              {/* Action Items */}
-              <Section title="Action Items">
-                <div className="space-y-2">
-                  {(report.assignedTasks || []).map((t, i) => (
-                    <div key={i} className="flex items-center justify-between bg-ligma-bg rounded-lg px-3 py-2 border border-ligma-deepblue/20">
-                      <span className="text-sm text-white">{t.task}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-ligma-deepblue text-gray-300">{t.suggestedOwner || '?'}</span>
+      <AnimatePresence>
+        {open && report && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-4xl max-h-[90vh]"
+            >
+              <Card className="glass-panel shadow-2xl border-primary/30">
+                <CardHeader className="border-b border-border/50">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-2xl gradient-text">Session DNA Report</CardTitle>
+                      <CardDescription className="mt-2">
+                        {new Date().toLocaleDateString()} · {report.sessionDuration || 'N/A'} · {(report.participants || []).length} participants
+                      </CardDescription>
                     </div>
-                  ))}
+                    <Button variant="ghost" size="icon" onClick={() => setOpen(false)}>
+                      <X size={20} />
+                    </Button>
+                  </div>
+                </CardHeader>
+
+                <ScrollArea className="max-h-[calc(90vh-200px)]">
+                  <CardContent className="p-6 space-y-6">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-4 gap-4">
+                      <StatCard label="Edits" value={report.totalEvents || 0} />
+                      <StatCard label="Tasks" value={report.actionItems?.length || 0} />
+                      <StatCard label="Decisions" value={(report.decisions || []).length} />
+                      <StatCard label="Conflicts" value={(report.conflictNodes || []).length} />
+                    </div>
+
+                    <Separator />
+
+                    {/* Executive Summary */}
+                    <Section title="Executive Summary">
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {report.executiveSummary || 'No summary available.'}
+                      </p>
+                    </Section>
+
+                    {/* Key Decisions */}
+                    <Section title="Key Decisions">
+                      <div className="space-y-2">
+                        {(report.keyDecisions || []).map((d, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                            className="flex items-start gap-2 text-sm"
+                          >
+                            <span className="text-primary mt-0.5">•</span>
+                            <span>{d}</span>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </Section>
+
+                    {/* Action Items */}
+                    <Section title="Action Items">
+                      <div className="space-y-2">
+                        {(report.assignedTasks || []).map((t, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                          >
+                            <Card className="glass-panel">
+                              <CardContent className="p-3 flex items-center justify-between">
+                                <span className="text-sm">{t.task}</span>
+                                <Badge variant="secondary">{t.suggestedOwner || '?'}</Badge>
+                              </CardContent>
+                            </Card>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </Section>
+
+                    {/* Open Questions */}
+                    <Section title="Open Questions">
+                      <div className="space-y-2">
+                        {(report.openQuestions || []).map((q, i) => (
+                          <motion.div
+                            key={i}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                            className="flex items-start gap-2 text-sm"
+                          >
+                            <span className="text-yellow-400 mt-0.5">?</span>
+                            <span>{q}</span>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </Section>
+
+                    {/* Collaboration Score */}
+                    <Section title="Collaboration Score">
+                      <div className="flex items-center gap-6">
+                        <div className="relative w-24 h-24">
+                          <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                            <circle cx="18" cy="18" r="15.9155" fill="none" stroke="hsl(var(--muted))" strokeWidth="3" />
+                            <circle
+                              cx="18"
+                              cy="18"
+                              r="15.9155"
+                              fill="none"
+                              stroke="hsl(var(--primary))"
+                              strokeWidth="3"
+                              strokeDasharray={`${report.collaborationScore || 0}, 100`}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-2xl font-bold gradient-text">{report.collaborationScore || 0}</span>
+                          </div>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium">
+                            {report.collaborationScore >= 80 ? 'Excellent collaboration' : report.collaborationScore >= 50 ? 'Moderate collaboration' : 'Low collaboration'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Based on team interaction patterns
+                          </p>
+                        </div>
+                      </div>
+                    </Section>
+
+                    {/* Risk Flags */}
+                    {(report.riskFlags || []).length > 0 && (
+                      <Section title="Risk Flags">
+                        <div className="flex flex-wrap gap-2">
+                          {report.riskFlags.map((f, i) => (
+                            <Badge key={i} variant="destructive" className="gap-1">
+                              ⚠ {f}
+                            </Badge>
+                          ))}
+                        </div>
+                      </Section>
+                    )}
+                  </CardContent>
+                </ScrollArea>
+
+                <div className="p-4 border-t border-border/50 flex gap-2">
+                  <Button onClick={downloadMarkdown} className="gap-2">
+                    <Download size={16} /> Download Markdown
+                  </Button>
+                  <Button onClick={copyReport} variant="outline" className="gap-2">
+                    <Copy size={16} /> Copy
+                  </Button>
                 </div>
-              </Section>
-
-              {/* Open Questions */}
-              <Section title="Open Questions">
-                <ul className="space-y-1">
-                  {(report.openQuestions || []).map((q, i) => (
-                    <li key={i} className="text-sm text-gray-300 flex items-start gap-2">
-                      <span className="text-yellow-400 mt-0.5">?</span>
-                      {q}
-                    </li>
-                  ))}
-                </ul>
-              </Section>
-
-              {/* Collaboration Score */}
-              <Section title="Collaboration Score">
-                <div className="flex items-center gap-4">
-                  <div className="relative w-20 h-20">
-                    <svg viewBox="0 0 36 36" className="w-full h-full">
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#1a1a2e" strokeWidth="3" />
-                      <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#e94560" strokeWidth="3" strokeDasharray={`${report.collaborationScore || 0}, 100`} />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">{report.collaborationScore || 0}</div>
-                  </div>
-                  <div className="text-xs text-gray-400">
-                    {report.collaborationScore >= 80 ? 'Excellent collaboration' : report.collaborationScore >= 50 ? 'Moderate collaboration' : 'Low collaboration'}
-                  </div>
-                </div>
-              </Section>
-
-              {/* Risk Flags */}
-              {(report.riskFlags || []).length > 0 && (
-                <Section title="Risk Flags">
-                  <div className="flex flex-wrap gap-2">
-                    {report.riskFlags.map((f, i) => (
-                      <span key={i} className="px-2 py-1 rounded bg-red-500/10 border border-red-500/20 text-red-400 text-xs">⚠ {f}</span>
-                    ))}
-                  </div>
-                </Section>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-ligma-deepblue/20 flex gap-2">
-              <button onClick={downloadMarkdown} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ligma-deepblue text-white text-sm hover:bg-ligma-deepblue/80 transition">
-                <Download size={14} /> Download Markdown
-              </button>
-              <button onClick={copyReport} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-ligma-bg border border-ligma-deepblue/30 text-gray-300 text-sm hover:text-white transition">
-                <Copy size={14} /> Copy
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Card>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }
 
 function Section({ title, children }) {
   return (
-    <div>
-      <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{title}</h3>
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
       {children}
     </div>
   );
 }
 
-function Stat({ label, value }) {
+function StatCard({ label, value }) {
   return (
-    <div className="bg-ligma-bg border border-ligma-deepblue/20 rounded-lg p-3 text-center">
-      <div className="text-xl font-bold text-white">{value}</div>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">{label}</div>
-    </div>
+    <Card className="glass-panel text-center">
+      <CardContent className="p-4">
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          transition={{ type: "spring", delay: 0.1 }}
+          className="text-3xl font-bold gradient-text"
+        >
+          {value}
+        </motion.div>
+        <p className="text-xs text-muted-foreground uppercase tracking-wider mt-2">{label}</p>
+      </CardContent>
+    </Card>
   );
 }
