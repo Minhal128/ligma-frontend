@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 
-const OPENAI_API_KEY_PLACEHOLDER = 'PASTE_OPENAI_KEY_HERE';
-const ANTHROPIC_API_KEY_PLACEHOLDER = 'PASTE_ANTHROPIC_KEY_HERE';
+const OPENAI_API_KEY_PLACEHOLDER = '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';
 
 export function useAIClassification(noteId, text, enabled = true) {
   const [classification, setClassification] = useState(null);
@@ -17,10 +16,8 @@ export function useAIClassification(noteId, text, enabled = true) {
     }
 
     const openAiKey = import.meta.env.VITE_OPENAI_API_KEY || OPENAI_API_KEY_PLACEHOLDER;
-    const anthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY || ANTHROPIC_API_KEY_PLACEHOLDER;
     const hasOpenAI = openAiKey && openAiKey !== OPENAI_API_KEY_PLACEHOLDER;
-    const hasAnthropic = anthropicKey && anthropicKey !== ANTHROPIC_API_KEY_PLACEHOLDER;
-    if (!hasOpenAI && !hasAnthropic) {
+    if (!hasOpenAI) {
       setIsClassifying(false);
       return;
     }
@@ -60,22 +57,6 @@ Text to classify: "${cleanText}"`;
           });
           const data = await response.json();
           result = JSON.parse(data?.choices?.[0]?.message?.content || '{}');
-        } else if (hasAnthropic) {
-          const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': anthropicKey,
-              'anthropic-version': '2023-06-01',
-            },
-            body: JSON.stringify({
-              model: 'claude-sonnet-4-20250514',
-              max_tokens: 200,
-              messages: [{ role: 'user', content: prompt }],
-            }),
-          });
-          const data = await response.json();
-          result = JSON.parse(data?.content?.[0]?.text || '{}');
         }
 
         if (result?.type) setClassification(result);

@@ -58,9 +58,8 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
   const [stickyNotesForAI, setStickyNotesForAI] = useState([]);
   const [showAIPanel, setShowAIPanel] = useState(false);
   const hasOpenAIKey = Boolean(import.meta.env.VITE_OPENAI_API_KEY);
-  const hasAnthropicKey = Boolean(import.meta.env.VITE_ANTHROPIC_API_KEY);
-  const frontendAIEnabled = hasOpenAIKey || hasAnthropicKey;
-  const aiModeLabel = hasOpenAIKey ? 'OpenAI + Backend' : hasAnthropicKey ? 'Claude + Backend' : 'Backend OpenAI';
+  const frontendAIEnabled = hasOpenAIKey;
+  const aiModeLabel = hasOpenAIKey ? 'OpenAI + Backend' : 'Backend OpenAI';
 
   const onMount = useCallback((editor) => {
     editorRef.current = editor;
