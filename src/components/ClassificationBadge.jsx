@@ -26,7 +26,7 @@ export default function ClassificationBadge({ classification, isClassifying }) {
   return (
     <div
       title={tooltip}
-      className={`pointer-events-none absolute bottom-[6px] right-[6px] rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wide opacity-90 shadow-neo-sm ${meta.classes}`}
+      className={`pointer-events-none absolute bottom-[6px] right-[6px] rounded-full border-2 border-black px-2 py-1 text-xs font-black uppercase tracking-wide opacity-95 shadow-neo-sm ${meta.classes}`}
     >
       <span className="mr-1">{meta.icon}</span>
       <span>{meta.label}</span>

@@ -5,7 +5,6 @@ import 'tldraw/tldraw.css';
 import * as Y from 'yjs';
 import CursorOverlay from './CursorOverlay.jsx';
 import ClassificationBadge from './ClassificationBadge.jsx';
-import { useAIClassification } from '../hooks/useAIClassification.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -35,10 +34,9 @@ function base64ToUint8Array(base64) {
 }
 
 function StickyClassificationOverlayItem({ note }) {
-  const { classification, isClassifying } = useAIClassification(note.id, note.text);
   return (
     <div style={{ position: 'absolute', left: note.left, top: note.top, width: note.width, height: note.height, pointerEvents: 'none' }}>
-      <ClassificationBadge classification={classification} isClassifying={isClassifying} />
+      <ClassificationBadge classification={note.aiTag || null} isClassifying={false} />
     </div>
   );
 }
@@ -148,16 +146,21 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       const notes = shapes
         .filter((shape) => (shape.type === 'note' || shape.type === 'geo') && shape?.props?.text)
         .map((shape) => {
-          const screenPos = editor.pageToScreen({ x: shape.x, y: shape.y });
+          const bounds = editor.getShapePageBounds(shape);
+          if (!bounds) return null;
+          const topLeft = editor.pageToScreen({ x: bounds.minX, y: bounds.minY });
+          const bottomRight = editor.pageToScreen({ x: bounds.maxX, y: bounds.maxY });
           return {
             id: shape.id,
             text: shape.props.text || '',
-            left: screenPos.x,
-            top: screenPos.y,
-            width: shape.props.w || 180,
-            height: shape.props.h || 120,
+            aiTag: shape.props.aiTag || null,
+            left: Math.min(topLeft.x, bottomRight.x),
+            top: Math.min(topLeft.y, bottomRight.y),
+            width: Math.max(40, Math.abs(bottomRight.x - topLeft.x)),
+            height: Math.max(40, Math.abs(bottomRight.y - topLeft.y)),
           };
-        });
+        })
+        .filter(Boolean);
       setStickyNotesForAI(notes);
     };
     refreshStickyNotes();
@@ -291,6 +294,9 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         autoFocus
         className="bg-transparent"
       />
+      <div className="absolute top-4 right-4 z-30 border-4 border-black px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm bg-neo-secondary text-black">
+        AI Active (backend) - {stickyNotesForAI.filter((n) => n.aiTag).length}/{stickyNotesForAI.length} tagged
+      </div>
       {stickyNotesForAI.map((note) => (
         <StickyClassificationOverlayItem key={note.id} note={note} />
       ))}
