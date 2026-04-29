@@ -47,7 +47,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     const yMap = ydoc.getMap('store');
 
     // Initial sync from Yjs to Tldraw
-    suppressOutRef.current = true;
     const initialRecords = [];
     yMap.forEach((record) => {
       // Sync everything EXCEPT strictly local session state
@@ -56,13 +55,15 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       }
     });
     if (initialRecords.length > 0) {
-      editor.store.put(initialRecords);
+      editor.store.mergeRemoteChanges(() => {
+        editor.store.put(initialRecords);
+      });
     }
-    suppressOutRef.current = false;
 
     // Monitor Yjs changes (Incoming)
     const observeY = (event) => {
-      if (suppressOutRef.current) return;
+      // If the change came from our own local Tldraw sync, ignore it to avoid loops
+      if (event.transaction.origin === 'local-sync') return;
       
       const toPut = [];
       const toRemove = [];
@@ -82,19 +83,18 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       });
 
       if (toPut.length > 0 || toRemove.length > 0) {
-        suppressOutRef.current = true;
         editor.store.mergeRemoteChanges(() => {
           if (toPut.length > 0) editor.store.put(toPut);
           if (toRemove.length > 0) editor.store.remove(toRemove);
         });
-        setTimeout(() => { suppressOutRef.current = false; }, 0);
       }
     };
     yMap.observe(observeY);
 
     // Sync Tldraw changes to Yjs (Outgoing)
     const unsubscribe = editor.store.listen((entry) => {
-      if (suppressOutRef.current) return;
+      // If this change came from our own observeY (mergeRemoteChanges), ignore it
+      if (entry.source === 'remote') return;
       
       ydoc.transact(() => {
         // Sync everything EXCEPT strictly local session state
@@ -115,12 +115,13 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
             yMap.delete(id);
           }
         }
-      });
+      }, 'local-sync');
     });
 
     // Listen for Yjs updates to send to server (Incremental)
-    const onYUpdate = (update) => {
-      if (suppressOutRef.current) return;
+    const onYUpdate = (update, origin) => {
+      // Only send updates that originated locally
+      if (origin === 'remote') return;
       sendMessage({ type: 'yjs_update', room_id: roomId, update: arrayBufferToBase64(update) });
     };
     ydoc.on('update', onYUpdate);
