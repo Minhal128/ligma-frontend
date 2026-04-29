@@ -309,16 +309,20 @@ export default function InviteMembers({ roomId, token, userRole, onClose }) {
                     <button
                       key={r}
                       onClick={() => setSelectedRole(r)}
-                      className={`flex-1 border-4 border-black px-3 py-2 text-xs font-black uppercase tracking-widest transition-all ${
+                      disabled={loading}
+                      className={`flex-1 border-4 border-black px-3 py-2 text-xs font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                         selectedRole === r 
                           ? 'bg-neo-accent shadow-neo-sm' 
-                          : 'bg-neo-muted hover:bg-neo-secondary'
+                          : 'bg-neo-white hover:bg-neo-secondary'
                       }`}
                     >
                       {roleLabels[r]}
                     </button>
                   ))}
                 </div>
+                <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-70">
+                  Selected: {roleLabels[selectedRole]}
+                </p>
               </div>
 
               <div className="space-y-4 border-t-4 border-black pt-4">
@@ -362,7 +366,11 @@ export default function InviteMembers({ roomId, token, userRole, onClose }) {
                             className="flex items-center justify-between p-2 hover:bg-neo-secondary cursor-pointer border-b-2 border-black last:border-0"
                           >
                             <span className="font-bold text-xs uppercase tracking-tight">@{u.username}</span>
-                            <Button size="sm" className="h-6 rounded-none border-2 border-black bg-neo-accent text-[0.6rem] font-black uppercase">
+                            <Button
+                              size="sm"
+                              disabled={loading}
+                              className="h-6 rounded-none border-2 border-black bg-neo-accent text-[0.6rem] font-black uppercase disabled:opacity-50"
+                            >
                               Add
                             </Button>
                           </div>

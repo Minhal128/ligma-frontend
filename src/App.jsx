@@ -259,6 +259,7 @@ function Workspace({ room, token, user, onLogout, onBack }) {
           token={token}
           members={members}
           myRole={effectiveRole}
+          myUserId={user.user_id}
           onTasksChange={setTasks}
         />
       </motion.div>

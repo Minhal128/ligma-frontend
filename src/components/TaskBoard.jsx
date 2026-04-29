@@ -14,13 +14,14 @@ const columns = [
   { key: 'done', label: 'Done' },
 ];
 
-export default function TaskBoard({ tasks, roomId, token, members, myRole, onTasksChange }) {
+export default function TaskBoard({ tasks, roomId, token, members, myRole, myUserId, onTasksChange }) {
   const [newTitle, setNewTitle] = useState('');
   const [assignee, setAssignee] = useState('');
   const [loading, setLoading] = useState(false);
   const isLead = myRole === 'lead';
   const canUpdate = myRole === 'lead' || myRole === 'contributor';
   const contributors = members.filter((m) => m.role === 'contributor');
+  const canUpdateTask = (task) => isLead || (myRole === 'contributor' && task.assigned_to === myUserId);
 
   const grouped = useMemo(() => {
     const buckets = { todo: [], in_progress: [], done: [] };
@@ -42,7 +43,8 @@ export default function TaskBoard({ tasks, roomId, token, members, myRole, onTas
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      onTasksChange((prev) => [data, ...prev]);
+      // Task creation is synchronized through websocket events.
+      // Avoid locally adding the task here to prevent duplicates.
       setNewTitle('');
       setAssignee('');
     } catch (e) {
@@ -107,7 +109,7 @@ export default function TaskBoard({ tasks, roomId, token, members, myRole, onTas
                   <div key={task.id} className="border-4 border-black bg-neo-white p-2">
                     <p className="text-xs font-black uppercase">{task.title || task.content}</p>
                     <p className="text-[10px] font-bold mt-1">{task.assigned_username ? `@${task.assigned_username}` : 'Unassigned'}</p>
-                    {canUpdate && (
+                    {canUpdate && canUpdateTask(task) && (
                       <div className="mt-2 flex gap-1">
                         {columns.map((s) => (
                           <button
