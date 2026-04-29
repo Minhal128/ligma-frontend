@@ -68,12 +68,17 @@ function Workspace({ room, token, user, onLogout, onBack }) {
   }, [room.id, token]);
 
   const throttleRef = useRef(0);
+  const lastCursorSentRef = useRef({ x: null, y: null });
   const handleCursorMove = (x, y) => {
     setCursorPos({ x, y });
+    const roundedX = Math.round(x);
+    const roundedY = Math.round(y);
+    if (lastCursorSentRef.current.x === roundedX && lastCursorSentRef.current.y === roundedY) return;
     const now = Date.now();
     if (now - throttleRef.current > 66) {
       throttleRef.current = now;
-      sendMessage({ type: 'cursor_move', room_id: room.id, x, y, user_id: user.user_id, username: user.username });
+      lastCursorSentRef.current = { x: roundedX, y: roundedY };
+      sendMessage({ type: 'cursor_move', room_id: room.id, x: roundedX, y: roundedY, user_id: user.user_id, username: user.username });
     }
   };
 
