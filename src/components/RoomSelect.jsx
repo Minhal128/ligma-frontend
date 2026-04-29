@@ -86,6 +86,9 @@ export default function RoomSelect({ token, user, onSelect }) {
     window.location.reload();
   };
 
+  const isLeadInAnyRoom = rooms.some((room) => room.my_role === 'lead') || leadDashboard.length > 0;
+  const displayRole = isLeadInAnyRoom ? 'lead' : user.role;
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-neo-canvas text-neo-ink">
       <div className="pointer-events-none absolute inset-0 bg-neo-grid opacity-40" />
@@ -121,7 +124,7 @@ export default function RoomSelect({ token, user, onSelect }) {
             <div className="flex flex-col items-end px-3">
               <span className="text-sm font-black uppercase tracking-wider text-neo-ink">@{user.username}</span>
               <span className="border-4 border-black bg-neo-muted px-2 py-0.5 text-[0.6rem] font-black uppercase tracking-widest shadow-neo-sm">
-                {user.role}
+                {displayRole}
               </span>
             </div>
             <Button
@@ -236,7 +239,7 @@ export default function RoomSelect({ token, user, onSelect }) {
           </motion.div>
         )}
 
-        {user.role === 'lead' && leadDashboard.length > 0 && (
+        {isLeadInAnyRoom && leadDashboard.length > 0 && (
           <div className="mt-12 border-4 border-black bg-neo-white p-6 shadow-neo-lg">
             <h3 className="text-2xl font-black uppercase tracking-tight mb-4">Lead Dashboard</h3>
             <div className="grid gap-4">
