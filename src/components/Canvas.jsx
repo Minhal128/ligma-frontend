@@ -5,6 +5,7 @@ import 'tldraw/tldraw.css';
 import * as Y from 'yjs';
 import CursorOverlay from './CursorOverlay.jsx';
 import ClassificationBadge from './ClassificationBadge.jsx';
+import { useAIClassification } from '../hooks/useAIClassification.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,10 +34,16 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
-function StickyClassificationOverlayItem({ note }) {
+function StickyClassificationOverlayItem({ note, onClassification }) {
+  const { classification, isClassifying } = useAIClassification(note.id, note.text);
+
+  useEffect(() => {
+    if (classification) onClassification(note.id, classification);
+  }, [classification, note.id, onClassification]);
+
   return (
     <div style={{ position: 'absolute', left: note.left, top: note.top, width: note.width, height: note.height, pointerEvents: 'none' }}>
-      <ClassificationBadge classification={note.aiTag || null} isClassifying={false} />
+      <ClassificationBadge classification={classification || note.aiTag || null} isClassifying={isClassifying} />
     </div>
   );
 }
@@ -49,6 +56,8 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
   const [aclNodeId, setAclNodeId] = useState(null);
   const [aclConfig, setAclConfig] = useState({ lead: 'write', contributor: 'write', viewer: 'read' });
   const [stickyNotesForAI, setStickyNotesForAI] = useState([]);
+  const [showAIPanel, setShowAIPanel] = useState(false);
+  const hasAnthropicKey = Boolean(import.meta.env.VITE_ANTHROPIC_API_KEY);
 
   const onMount = useCallback((editor) => {
     editorRef.current = editor;
@@ -287,6 +296,27 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     setShowAclModal(false);
   };
 
+  const persistClassification = useCallback((shapeId, classification) => {
+    if (!editorRef.current || !classification?.type) return;
+    const editor = editorRef.current;
+    const shape = editor.getShape(shapeId);
+    if (!shape?.props) return;
+
+    const current = shape.props.aiTag;
+    if (current && current.type === classification.type && current.confidence === classification.confidence) return;
+
+    editor.updateShape({
+      id: shapeId,
+      type: shape.type,
+      props: {
+        ...shape.props,
+        aiTag: classification,
+      },
+    });
+  }, []);
+
+  const taggedCount = stickyNotesForAI.filter((n) => n.aiTag).length;
+
   return (
     <div className="relative w-full h-full">
       <Tldraw
@@ -294,11 +324,32 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         autoFocus
         className="bg-transparent"
       />
-      <div className="absolute bottom-20 right-4 z-30 border-4 border-black px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm bg-neo-secondary text-black">
-        AI Active (backend) - {stickyNotesForAI.filter((n) => n.aiTag).length}/{stickyNotesForAI.length} tagged
-      </div>
+      <button
+        type="button"
+        onClick={() => setShowAIPanel((s) => !s)}
+        className={`absolute bottom-20 right-4 z-30 border-4 border-black px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm ${
+          hasAnthropicKey ? 'bg-neo-secondary text-black' : 'bg-neo-accent text-black'
+        }`}
+      >
+        AI {hasAnthropicKey ? `${taggedCount}/${stickyNotesForAI.length}` : 'OFF'}
+      </button>
+      {showAIPanel && (
+        <div className="absolute bottom-36 right-4 z-30 w-64 border-4 border-black bg-neo-white p-3 shadow-neo-lg">
+          <p className="text-xs font-black uppercase tracking-widest">AI Classification</p>
+          <p className="mt-2 text-[10px] font-bold uppercase">
+            {hasAnthropicKey ? 'Claude active (2s debounce after typing)' : 'Set VITE_ANTHROPIC_API_KEY in frontend env'}
+          </p>
+          <p className="mt-2 text-[10px] font-bold uppercase">Tagged Notes: {taggedCount}/{stickyNotesForAI.length}</p>
+          <div className="mt-2 text-[10px] font-bold uppercase space-y-1">
+            <p>✅ Task</p>
+            <p>🔵 Decision</p>
+            <p>❓ Question</p>
+            <p>📎 Reference</p>
+          </div>
+        </div>
+      )}
       {stickyNotesForAI.map((note) => (
-        <StickyClassificationOverlayItem key={note.id} note={note} />
+        <StickyClassificationOverlayItem key={note.id} note={note} onClassification={persistClassification} />
       ))}
       <CursorOverlay cursors={cursors} />
 
