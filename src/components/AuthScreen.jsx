@@ -15,11 +15,9 @@ const API_URL = (() => {
 const getAuthRoute = () => {
   if (typeof window === 'undefined') return 'entry';
   const path = window.location.pathname.replace(/^\/+/, '').toLowerCase();
-  const hash = window.location.hash.replace('#', '').replace(/^\/+/, '').toLowerCase();
-  const route = hash || path;
-  if (route === 'login') return 'login';
-  if (route === 'register' || route === 'signup') return 'register';
-  if (route === 'forgot-password') return 'forgot-password';
+  if (path === 'login') return 'login';
+  if (path === 'register' || path === 'signup') return 'register';
+  if (path === 'forgot-password') return 'forgot-password';
   return 'entry';
 };
 
@@ -39,10 +37,8 @@ export default function AuthScreen({ onLogin }) {
 
   useEffect(() => {
     const syncRoute = () => setRoute(getAuthRoute());
-    window.addEventListener('hashchange', syncRoute);
     window.addEventListener('popstate', syncRoute);
     return () => {
-      window.removeEventListener('hashchange', syncRoute);
       window.removeEventListener('popstate', syncRoute);
     };
   }, []);
@@ -54,12 +50,8 @@ export default function AuthScreen({ onLogin }) {
 
   const goTo = (nextRoute) => {
     setError('');
-    if (nextRoute === 'entry') {
-      window.location.hash = '';
-      setRoute('entry');
-      return;
-    }
-    window.location.hash = `/${nextRoute}`;
+    const path = nextRoute === 'entry' ? '/' : `/${nextRoute}`;
+    window.history.pushState({}, '', path);
     setRoute(nextRoute);
   };
 
@@ -91,7 +83,7 @@ export default function AuthScreen({ onLogin }) {
 
   const handleForgotPasswordSuccess = () => {
     setRoute('login');
-    window.location.hash = '#/login';
+    window.history.pushState({}, '', '/login');
   };
 
   return (
@@ -237,7 +229,7 @@ export default function AuthScreen({ onLogin }) {
                     {isEntry ? (
                       <div className="space-y-3">
                         <div className="border-4 border-black bg-neo-accent px-3 py-2 text-sm font-bold shadow-neo-sm">
-                          Separate routes: <span className="font-black">#/login</span> or <span className="font-black">#/register</span>.
+                          Separate routes: <span className="font-black">/login</span> or <span className="font-black">/register</span>.
                         </div>
                         <div className="border-4 border-black bg-neo-white px-3 py-2 text-xs font-black uppercase tracking-widest shadow-neo-sm">
                           Live sessions ready
@@ -444,8 +436,8 @@ export default function AuthScreen({ onLogin }) {
                  <p className="font-bold text-sm max-w-sm">The collaboration tool for teams that hate waiting, hate soft UIs, and love getting things done fast.</p>
                </div>
                <div className="flex flex-col items-center sm:items-end gap-2 font-black uppercase tracking-widest text-sm">
-                 <a href="#/login" className="hover:underline decoration-4 underline-offset-4 cursor-pointer hover:text-neo-accent transition-colors">Start working</a>
-                 <a href="#/register" className="hover:underline decoration-4 underline-offset-4 cursor-pointer hover:text-neo-accent transition-colors">Create ID</a>
+                 <a href="/login" className="hover:underline decoration-4 underline-offset-4 cursor-pointer hover:text-neo-accent transition-colors">Start working</a>
+                 <a href="/register" className="hover:underline decoration-4 underline-offset-4 cursor-pointer hover:text-neo-accent transition-colors">Create ID</a>
                  <div className="mt-4 border-4 border-black bg-neo-secondary px-2 py-1 rotate-3 text-xs">
                    v1.0.0-brutal
                  </div>

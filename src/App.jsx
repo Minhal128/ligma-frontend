@@ -259,14 +259,9 @@ export default function App() {
   useEffect(() => {
     if (!token) return;
     
-    // Check both search and hash for invite token
+    // Check search params for invite token
     const searchParams = new URLSearchParams(window.location.search);
-    let inviteToken = searchParams.get('invite');
-    
-    if (!inviteToken && window.location.hash.includes('?')) {
-      const hashQuery = window.location.hash.split('?')[1];
-      inviteToken = new URLSearchParams(hashQuery).get('invite');
-    }
+    const inviteToken = searchParams.get('invite');
 
     if (!inviteToken) return;
 
@@ -279,9 +274,8 @@ export default function App() {
         setInviteAcceptedCount(c => c + 1);
       }
     }).finally(() => {
-      // Clean up URL
-      const cleanHash = window.location.hash.split('?')[0];
-      window.history.replaceState({}, '', `${window.location.pathname}${cleanHash}`);
+      // Clean up invite query while preserving path
+      window.history.replaceState({}, '', window.location.pathname);
     });
   }, [token]);
 
