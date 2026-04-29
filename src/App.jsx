@@ -4,7 +4,6 @@ import { useWebSocket } from './hooks/useWebSocket.js';
 import { Users } from 'lucide-react';
 import Canvas from './components/Canvas.jsx';
 import EventLog from './components/EventLog.jsx';
-import TaskBoard from './components/TaskBoard.jsx';
 import ConflictHeatmap from './components/ConflictHeatmap.jsx';
 import VoiceToCanvas from './components/VoiceToCanvas.jsx';
 import SessionDNAReport from './components/SessionDNAReport.jsx';
@@ -26,7 +25,6 @@ function Workspace({ room, token, user, onLogout, onBack }) {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [conflicts, setConflicts] = useState(new Map());
   const [violations, setViolations] = useState([]);
-  const [tasks, setTasks] = useState([]);
   const [members, setMembers] = useState([]);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const effectiveRole = room.my_role || user.role;
@@ -44,21 +42,8 @@ function Workspace({ room, token, user, onLogout, onBack }) {
       if (msg.type === 'security_violation') {
         setViolations(prev => [msg, ...prev]);
       }
-      if (msg.type === 'task_created') {
-        setTasks(prev => [msg.task, ...prev]);
-      }
-      if (msg.type === 'task_updated') {
-        setTasks(prev => prev.map((t) => (t.id === msg.task.id ? { ...t, ...msg.task } : t)));
-      }
     });
   }, [addListener]);
-
-  useEffect(() => {
-    fetch(`${API_URL}/tasks/${room.id}`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(setTasks)
-      .catch(console.error);
-  }, [room.id, token]);
 
   useEffect(() => {
     fetch(`${API_URL}/rooms/${room.id}/members`, { headers: { Authorization: `Bearer ${token}` } })
@@ -116,9 +101,6 @@ function Workspace({ room, token, user, onLogout, onBack }) {
         <div className="flex gap-2">
           <button onClick={() => document.getElementById('mobile-log').classList.toggle('hidden')} className="border-4 border-black bg-neo-secondary p-2 shadow-neo-sm active:translate-y-1">
              <span className="font-bold text-xs uppercase">Log</span>
-          </button>
-          <button onClick={() => document.getElementById('mobile-tasks').classList.toggle('hidden')} className="border-4 border-black bg-neo-muted p-2 shadow-neo-sm active:translate-y-1">
-             <span className="font-bold text-xs uppercase">Tasks</span>
           </button>
         </div>
       </div>
@@ -249,25 +231,6 @@ function Workspace({ room, token, user, onLogout, onBack }) {
           )}
         </AnimatePresence>
       </div>
-
-      {/* Right Sidebar - Task Board */}
-      <motion.div
-        id="mobile-tasks"
-        initial={{ x: 300 }}
-        animate={{ x: 0 }}
-        transition={{ type: "spring", damping: 25, stiffness: 200 }}
-        className="hidden md:flex absolute md:relative top-[68px] md:top-0 right-0 w-full md:w-96 h-[calc(100vh-68px)] md:h-screen flex-shrink-0 flex-col border-l-4 md:border-black bg-neo-white z-40 md:z-10 shadow-[auto_-10px_30px_rgba(0,0,0,0.5)] md:shadow-none"
-      >
-        <TaskBoard
-          tasks={tasks}
-          roomId={room.id}
-          token={token}
-          members={members}
-          myRole={effectiveRole}
-          myUserId={user.user_id}
-          onTasksChange={setTasks}
-        />
-      </motion.div>
 
       {/* Invite Members Modal */}
       <AnimatePresence>

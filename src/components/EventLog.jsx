@@ -22,13 +22,14 @@ function formatEvent(ev) {
   const p = ev.payload || {};
   const u = ev.username || 'anon';
   switch (ev.event_type) {
-    case 'node_created': return { user: u, action: 'created node', detail: p.text || 'item' };
+    case 'node_created': return { user: u, action: `created ${p.shape || 'node'}`, detail: p.text || 'empty note' };
     case 'node_created_via_voice': return { user: u, action: 'created note via voice', detail: '' };
-    case 'node_moved': return { user: u, action: 'moved a node', detail: '' };
-    case 'node_text_changed': return { user: u, action: 'edited a node', detail: '' };
-    case 'node_deleted': return { user: u, action: 'deleted a node', detail: '' };
-    case 'node_acl_changed': return { user: u, action: 'changed permissions', detail: '' };
-    case 'task_created': return { user: u, action: 'created task', detail: '' };
+    case 'node_moved': return { user: u, action: 'moved a node', detail: `x:${Math.round(p.x || 0)} y:${Math.round(p.y || 0)}` };
+    case 'node_text_changed': return { user: u, action: 'edited node text', detail: p.text || '' };
+    case 'node_deleted': return { user: u, action: 'deleted a node', detail: p.text || '' };
+    case 'node_acl_changed': return { user: u, action: 'changed permissions', detail: p.node_id || '' };
+    case 'task_created': return { user: u, action: `created task (${p.status || 'todo'})`, detail: p.title || p.content || '' };
+    case 'task_updated': return { user: u, action: `updated task (${p.status || 'todo'})`, detail: p.title || '' };
     case 'user_joined': return { user: u, action: 'joined', detail: '' };
     case 'user_left': return { user: u, action: 'left', detail: '' };
     default: return { user: u, action: ev.event_type, detail: '' };
@@ -65,32 +66,7 @@ export default function EventLog({ roomId, token, addListener, connected }) {
     }
   }, [events, collapsed]);
 
-  // Aggregate spammy join/leave events
-  const displayEvents = [];
-  const joinEventsMap = new Map();
-
-  events.forEach((ev) => {
-    if (ev.event_type === 'user_left') return; // Remove leaving spam completely
-
-    if (ev.event_type === 'user_joined') {
-      const user = ev.username || 'anon';
-      if (!joinEventsMap.has(user)) {
-        const newEv = { ...ev, joinCount: 1 };
-        joinEventsMap.set(user, newEv);
-        displayEvents.push(newEv);
-      } else {
-        const existing = joinEventsMap.get(user);
-        existing.joinCount += 1;
-        existing.created_at = ev.created_at; // Update to latest timestamp
-        // Push to bottom of log
-        const idx = displayEvents.indexOf(existing);
-        if (idx !== -1) displayEvents.splice(idx, 1);
-        displayEvents.push(existing);
-      }
-    } else {
-      displayEvents.push(ev);
-    }
-  });
+  const displayEvents = events;
 
   if (collapsed) {
     return (
@@ -163,14 +139,7 @@ export default function EventLog({ roomId, token, addListener, connected }) {
                       >
                         @{formatted.user}
                       </span>
-                      <span className="text-neo-ink/80 ml-1.5">
-                        {formatted.action} 
-                        {ev.joinCount > 1 && (
-                          <span className="ml-1 text-neo-ink font-black bg-neo-secondary px-1 border-2 border-black rotate-2 inline-block">
-                            ({ev.joinCount}x)
-                          </span>
-                        )}
-                      </span>
+                      <span className="text-neo-ink/80 ml-1.5">{formatted.action}</span>
                       {formatted.detail && (
                         <span className="bg-neo-secondary px-1 py-0.5 text-neo-ink border-2 border-black block mt-1.5 w-fit max-w-full truncate text-[10px] xl:text-xs">
                           "{formatted.detail}"

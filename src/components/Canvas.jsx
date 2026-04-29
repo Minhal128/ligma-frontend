@@ -4,6 +4,8 @@ import { Tldraw, createShapeId } from 'tldraw';
 import 'tldraw/tldraw.css';
 import * as Y from 'yjs';
 import CursorOverlay from './CursorOverlay.jsx';
+import ClassificationBadge from './ClassificationBadge.jsx';
+import { useAIClassification } from '../hooks/useAIClassification.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -32,6 +34,15 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
+function StickyClassificationOverlayItem({ note }) {
+  const { classification, isClassifying } = useAIClassification(note.id, note.text);
+  return (
+    <div style={{ position: 'absolute', left: note.left, top: note.top, width: note.width, height: note.height, pointerEvents: 'none' }}>
+      <ClassificationBadge classification={classification} isClassifying={isClassifying} />
+    </div>
+  );
+}
+
 function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursorMove }) {
   const editorRef = useRef(null);
   const ydocRef = useRef(new Y.Doc());
@@ -39,7 +50,7 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
   const [showAclModal, setShowAclModal] = useState(false);
   const [aclNodeId, setAclNodeId] = useState(null);
   const [aclConfig, setAclConfig] = useState({ lead: 'write', contributor: 'write', viewer: 'read' });
-  const suppressOutRef = useRef(false);
+  const [stickyNotesForAI, setStickyNotesForAI] = useState([]);
 
   const onMount = useCallback((editor) => {
     editorRef.current = editor;
@@ -132,6 +143,27 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     };
     window.addEventListener('pointermove', handlePointerMove);
 
+    const refreshStickyNotes = () => {
+      const shapes = editor.getCurrentPageShapes();
+      const notes = shapes
+        .filter((shape) => (shape.type === 'note' || shape.type === 'geo') && shape?.props?.text)
+        .map((shape) => {
+          const screenPos = editor.pageToScreen({ x: shape.x, y: shape.y });
+          return {
+            id: shape.id,
+            text: shape.props.text || '',
+            left: screenPos.x,
+            top: screenPos.y,
+            width: shape.props.w || 180,
+            height: shape.props.h || 120,
+          };
+        });
+      setStickyNotesForAI(notes);
+    };
+    refreshStickyNotes();
+    const unlistenStore = editor.store.listen(() => refreshStickyNotes(), { source: 'all' });
+    window.addEventListener('resize', refreshStickyNotes);
+
     const handleContextMenu = (e) => {
       e.preventDefault();
       const hovered = editor.getHoveredShapes ? editor.getHoveredShapes() : new Set();
@@ -149,7 +181,9 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       yMap.unobserve(observeY);
       ydoc.off('update', onYUpdate);
       unsubscribe();
+      unlistenStore?.();
       window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('resize', refreshStickyNotes);
       if (container) container.removeEventListener('contextmenu', handleContextMenu);
     };
   }, [roomId, sendMessage, onCursorMove]);
@@ -257,6 +291,9 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         autoFocus
         className="bg-transparent"
       />
+      {stickyNotesForAI.map((note) => (
+        <StickyClassificationOverlayItem key={note.id} note={note} />
+      ))}
       <CursorOverlay cursors={cursors} />
 
       <AnimatePresence>
