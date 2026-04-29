@@ -30,6 +30,7 @@ function formatEvent(ev) {
     case 'node_acl_changed': return { user: u, action: 'changed permissions', detail: p.node_id || '' };
     case 'task_created': return { user: u, action: `created task (${p.status || 'todo'})`, detail: p.title || p.content || '' };
     case 'task_updated': return { user: u, action: `updated task (${p.status || 'todo'})`, detail: p.title || '' };
+    case 'cursor_moved': return { user: u, action: 'moved cursor', detail: `x:${Math.round(p.x || 0)} y:${Math.round(p.y || 0)}` };
     case 'user_joined': return { user: u, action: 'joined', detail: '' };
     case 'user_left': return { user: u, action: 'left', detail: '' };
     default: return { user: u, action: ev.event_type, detail: '' };
@@ -52,10 +53,10 @@ export default function EventLog({ roomId, token, addListener, connected }) {
     if (!addListener) return;
     return addListener((msg) => {
       if (msg.type === 'event_log_entry' && msg.event) {
-        setEvents(prev => [...prev, msg.event]);
+        setEvents(prev => [...prev, msg.event].slice(-300));
       }
       if (msg.type === 'missed_events') {
-        setEvents(prev => [...prev, ...(msg.events || [])]);
+        setEvents(prev => [...prev, ...(msg.events || [])].slice(-300));
       }
     });
   }, [addListener]);

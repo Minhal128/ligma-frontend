@@ -294,7 +294,7 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         autoFocus
         className="bg-transparent"
       />
-      <div className="absolute top-4 right-4 z-30 border-4 border-black px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm bg-neo-secondary text-black">
+      <div className="absolute bottom-20 right-4 z-30 border-4 border-black px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm bg-neo-secondary text-black">
         AI Active (backend) - {stickyNotesForAI.filter((n) => n.aiTag).length}/{stickyNotesForAI.length} tagged
       </div>
       {stickyNotesForAI.map((note) => (
