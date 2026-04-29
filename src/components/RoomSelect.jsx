@@ -12,6 +12,7 @@ const API_URL = (() => {
 
 export default function RoomSelect({ token, user, onSelect }) {
   const [rooms, setRooms] = useState([]);
+  const [leadDashboard, setLeadDashboard] = useState([]);
   const [newName, setNewName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -23,9 +24,18 @@ export default function RoomSelect({ token, user, onSelect }) {
       .catch(console.error);
   }, [token]);
 
+  const fetchLeadDashboard = useCallback(() => {
+    if (user.role !== 'lead') return;
+    fetch(`${API_URL}/rooms/lead/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then(setLeadDashboard)
+      .catch(console.error);
+  }, [token, user.role]);
+
   useEffect(() => {
     fetchRooms();
-  }, [fetchRooms]);
+    fetchLeadDashboard();
+  }, [fetchRooms, fetchLeadDashboard]);
 
   useEffect(() => {
     const wsUrl = (() => {
@@ -225,6 +235,43 @@ export default function RoomSelect({ token, user, onSelect }) {
               Deploy your first workspace above to begin
             </p>
           </motion.div>
+        )}
+
+        {user.role === 'lead' && leadDashboard.length > 0 && (
+          <div className="mt-12 border-4 border-black bg-neo-white p-6 shadow-neo-lg">
+            <h3 className="text-2xl font-black uppercase tracking-tight mb-4">Lead Dashboard</h3>
+            <div className="grid gap-4">
+              {leadDashboard.map((room) => {
+                const todo = room.tasks.filter((t) => t.status === 'todo');
+                const inProgress = room.tasks.filter((t) => t.status === 'in_progress');
+                const done = room.tasks.filter((t) => t.status === 'done');
+                return (
+                  <div key={room.id} className="border-4 border-black bg-neo-canvas p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-black uppercase">{room.name}</h4>
+                      <button onClick={() => onSelect(room)} className="border-4 border-black px-2 py-1 bg-neo-accent text-xs font-black uppercase">
+                        Open
+                      </button>
+                    </div>
+                    <div className="grid md:grid-cols-3 gap-3 text-xs">
+                      <div className="border-4 border-black bg-neo-white p-2">
+                        <p className="font-black uppercase mb-2">To Do ({todo.length})</p>
+                        {todo.slice(0, 4).map((t) => <p key={t.id} className="font-bold truncate">{t.title}</p>)}
+                      </div>
+                      <div className="border-4 border-black bg-neo-white p-2">
+                        <p className="font-black uppercase mb-2">In Progress ({inProgress.length})</p>
+                        {inProgress.slice(0, 4).map((t) => <p key={t.id} className="font-bold truncate">{t.title}</p>)}
+                      </div>
+                      <div className="border-4 border-black bg-neo-white p-2">
+                        <p className="font-black uppercase mb-2">Done ({done.length})</p>
+                        {done.slice(0, 4).map((t) => <p key={t.id} className="font-bold truncate">{t.title}</p>)}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useWebSocket } from './hooks/useWebSocket.js';
+import { Users } from 'lucide-react';
 import Canvas from './components/Canvas.jsx';
 import EventLog from './components/EventLog.jsx';
 import TaskBoard from './components/TaskBoard.jsx';
@@ -11,6 +12,7 @@ import RBACViolationFeed from './components/RBACViolationFeed.jsx';
 import RoleGuard from './components/RoleGuard.jsx';
 import AuthScreen from './components/AuthScreen.jsx';
 import RoomSelect from './components/RoomSelect.jsx';
+import InviteMembers from './components/InviteMembers.jsx';
 
 const API_URL = (() => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
@@ -18,13 +20,16 @@ const API_URL = (() => {
   return 'http://localhost:4000/api';
 })();
 
-function Workspace({ room, token, user, onLogout }) {
+function Workspace({ room, token, user, onLogout, onBack }) {
   const { connected, sendMessage, addListener } = useWebSocket(room.id, token);
   const [showConflictMap, setShowConflictMap] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [conflicts, setConflicts] = useState(new Map());
   const [violations, setViolations] = useState([]);
   const [tasks, setTasks] = useState([]);
+  const [members, setMembers] = useState([]);
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const effectiveRole = room.my_role || user.role;
 
   useEffect(() => {
     return addListener((msg) => {
@@ -42,6 +47,9 @@ function Workspace({ room, token, user, onLogout }) {
       if (msg.type === 'task_created') {
         setTasks(prev => [msg.task, ...prev]);
       }
+      if (msg.type === 'task_updated') {
+        setTasks(prev => prev.map((t) => (t.id === msg.task.id ? { ...t, ...msg.task } : t)));
+      }
     });
   }, [addListener]);
 
@@ -49,6 +57,13 @@ function Workspace({ room, token, user, onLogout }) {
     fetch(`${API_URL}/tasks/${room.id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(setTasks)
+      .catch(console.error);
+  }, [room.id, token]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/rooms/${room.id}/members`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(setMembers)
       .catch(console.error);
   }, [room.id, token]);
 
@@ -79,6 +94,12 @@ function Workspace({ room, token, user, onLogout }) {
 
       {/* Desktop Logout Button */}
       <div className="hidden md:block absolute top-6 right-[400px] z-50">
+        <button
+          onClick={onBack}
+          className="mr-2 border-4 border-black bg-neo-secondary px-4 py-2 font-black uppercase text-xs shadow-neo-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
+        >
+          Back
+        </button>
         <button 
           onClick={onLogout}
           className="border-4 border-black bg-red-500 px-4 py-2 font-black uppercase text-xs shadow-neo-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
@@ -121,7 +142,7 @@ function Workspace({ room, token, user, onLogout }) {
         className="hidden md:flex absolute md:relative top-[68px] md:top-0 left-0 w-full md:w-80 h-[calc(100vh-68px)] md:h-screen flex-shrink-0 flex-col border-r-4 md:border-black bg-neo-white z-40 md:z-10 shadow-neo-xl md:shadow-none"
       >
         <EventLog roomId={room.id} token={token} addListener={addListener} connected={connected} />
-        <RoleGuard userRole={user.role} allowed={['lead']}>
+        <RoleGuard userRole={effectiveRole} allowed={['lead']}>
           <RBACViolationFeed roomId={room.id} token={token} violations={violations} onClear={() => setViolations([])} />
         </RoleGuard>
       </motion.div>
@@ -143,6 +164,15 @@ function Workspace({ room, token, user, onLogout }) {
           <div className="border-4 border-black bg-neo-secondary px-4 py-1.5 font-black uppercase tracking-widest text-xs shadow-neo-sm rotate-1 pointer-events-auto max-w-[150px] lg:max-w-[250px] truncate" title={`@${user.username}`}>
             @{user.username}
           </div>
+          <button
+            onClick={() => setShowInviteModal(true)}
+            className="flex items-center gap-2 border-4 border-black bg-neo-white px-3 py-1.5 font-black uppercase text-xs shadow-neo-sm -rotate-1 hover:-translate-y-0.5 hover:shadow-neo-md transition-all pointer-events-auto"
+            title="Manage Room Members"
+          >
+            <Users className="size-4 stroke-[3px]" />
+            <span className="hidden sm:inline">Members</span>
+            <span className="sm:hidden">Team</span>
+          </button>
         </div>
 
         <div className="flex-1 relative">
@@ -190,7 +220,7 @@ function Workspace({ room, token, user, onLogout }) {
             </motion.div>
             
             <div className="hidden sm:block pointer-events-auto">
-               <RoleGuard userRole={user.role} allowed={['lead']}>
+               <RoleGuard userRole={effectiveRole} allowed={['lead']}>
                  <SessionDNAReport roomId={room.id} token={token} />
                </RoleGuard>
             </div>
@@ -223,8 +253,27 @@ function Workspace({ room, token, user, onLogout }) {
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
         className="hidden md:flex absolute md:relative top-[68px] md:top-0 right-0 w-full md:w-96 h-[calc(100vh-68px)] md:h-screen flex-shrink-0 flex-col border-l-4 md:border-black bg-neo-white z-40 md:z-10 shadow-[auto_-10px_30px_rgba(0,0,0,0.5)] md:shadow-none"
       >
-        <TaskBoard tasks={tasks} />
+        <TaskBoard
+          tasks={tasks}
+          roomId={room.id}
+          token={token}
+          members={members}
+          myRole={effectiveRole}
+          onTasksChange={setTasks}
+        />
       </motion.div>
+
+      {/* Invite Members Modal */}
+      <AnimatePresence>
+        {showInviteModal && (
+          <InviteMembers
+            roomId={room.id}
+            token={token}
+            userRole={room.my_role}
+            onClose={() => setShowInviteModal(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -235,6 +284,20 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem('ligma_user')); } catch { return null; }
   });
   const [room, setRoom] = useState(null);
+
+  useEffect(() => {
+    if (!token) return;
+    const inviteToken = new URLSearchParams(window.location.search).get('invite');
+    if (!inviteToken) return;
+    fetch(`${API_URL}/rooms/invites/accept`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ token: inviteToken }),
+    }).finally(() => {
+      const next = `${window.location.origin}${window.location.pathname}${window.location.hash || ''}`;
+      window.history.replaceState({}, '', next);
+    });
+  }, [token]);
 
   const logout = () => {
     localStorage.removeItem('ligma_token');
@@ -257,5 +320,5 @@ export default function App() {
     return <RoomSelect token={token} user={user} onSelect={r => setRoom(r)} />;
   }
 
-  return <Workspace room={room} token={token} user={user} onLogout={logout} />;
+  return <Workspace room={room} token={token} user={user} onLogout={logout} onBack={() => setRoom(null)} />;
 }

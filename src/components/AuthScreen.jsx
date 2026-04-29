@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
-import { ArrowRight, Sparkles, Star } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowRight, Sparkles, Star, Lock, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import ForgotPassword from './ForgotPassword.jsx';
 
 const API_URL = (() => {
   if (import.meta.env.VITE_API_URL) return import.meta.env.VITE_API_URL;
@@ -18,6 +19,7 @@ const getAuthRoute = () => {
   const route = hash || path;
   if (route === 'login') return 'login';
   if (route === 'register' || route === 'signup') return 'register';
+  if (route === 'forgot-password') return 'forgot-password';
   return 'entry';
 };
 
@@ -25,12 +27,14 @@ export default function AuthScreen({ onLogin }) {
   const [route, setRoute] = useState(getAuthRoute);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [role, setRole] = useState('contributor');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const isEntry = route === 'entry';
   const isRegister = route === 'register';
+  const isForgotPassword = route === 'forgot-password';
   const mode = isRegister ? 'register' : 'login';
 
   useEffect(() => {
@@ -64,7 +68,9 @@ export default function AuthScreen({ onLogin }) {
     setError('');
     setLoading(true);
     const url = mode === 'login' ? `${API_URL}/auth/login` : `${API_URL}/auth/register`;
-    const body = mode === 'login' ? { username, password } : { username, password, role };
+    const body = mode === 'login' 
+      ? { username, password } 
+      : { username, password, role, email };
     try {
       const res = await fetch(url, {
         method: 'POST',
@@ -81,6 +87,11 @@ export default function AuthScreen({ onLogin }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotPasswordSuccess = () => {
+    setRoute('login');
+    window.location.hash = '#/login';
   };
 
   return (
@@ -270,20 +281,46 @@ export default function AuthScreen({ onLogin }) {
                           />
                         </div>
                         {isRegister && (
-                          <div className="space-y-2">
-                            <Label htmlFor="role" className="text-xs font-black uppercase tracking-[0.3em]">
-                              Role
-                            </Label>
-                            <select
-                              id="role"
-                              value={role}
-                              onChange={(e) => setRole(e.target.value)}
-                              className="h-12 w-full rounded-none border-4 border-black bg-white px-3 text-base font-bold text-neo-ink focus-visible:border-black focus-visible:bg-neo-secondary focus-visible:ring-0 focus-visible:shadow-neo-sm sm:h-14"
+                          <>
+                            <div className="space-y-2">
+                              <Label htmlFor="email" className="text-xs font-black uppercase tracking-[0.3em]">
+                                Email
+                              </Label>
+                              <Input
+                                id="email"
+                                type="email"
+                                placeholder="For password recovery"
+                                value={email}
+                                onChange={e => setEmail(e.target.value)}
+                                className="h-12 rounded-none border-4 border-black bg-white text-base font-bold text-neo-ink placeholder:text-black/40 focus-visible:border-black focus-visible:bg-neo-secondary focus-visible:ring-0 focus-visible:shadow-neo-sm sm:h-14"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="role" className="text-xs font-black uppercase tracking-[0.3em]">
+                                Role
+                              </Label>
+                              <select
+                                id="role"
+                                value={role}
+                                onChange={(e) => setRole(e.target.value)}
+                                className="h-12 w-full rounded-none border-4 border-black bg-white px-3 text-base font-bold text-neo-ink focus-visible:border-black focus-visible:bg-neo-secondary focus-visible:ring-0 focus-visible:shadow-neo-sm sm:h-14"
+                              >
+                                <option value="contributor">Contributor</option>
+                                <option value="lead">Lead</option>
+                                <option value="viewer">Viewer</option>
+                              </select>
+                            </div>
+                          </>
+                        )}
+                        {!isRegister && (
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => goTo('forgot-password')}
+                              className="text-xs font-bold uppercase tracking-widest hover:text-neo-accent hover:underline transition-colors"
                             >
-                              <option value="contributor">Contributor</option>
-                              <option value="lead">Lead</option>
-                              <option value="viewer">Viewer</option>
-                            </select>
+                              Forgot Password?
+                            </button>
                           </div>
                         )}
                         {error && (
