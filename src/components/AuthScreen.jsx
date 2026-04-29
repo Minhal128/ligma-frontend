@@ -295,21 +295,6 @@ export default function AuthScreen({ onLogin }) {
                                 className="h-12 rounded-none border-4 border-black bg-white text-base font-bold text-neo-ink placeholder:text-black/40 focus-visible:border-black focus-visible:bg-neo-secondary focus-visible:ring-0 focus-visible:shadow-neo-sm sm:h-14"
                               />
                             </div>
-                            <div className="space-y-2">
-                              <Label htmlFor="role" className="text-xs font-black uppercase tracking-[0.3em]">
-                                Role
-                              </Label>
-                              <select
-                                id="role"
-                                value={role}
-                                onChange={(e) => setRole(e.target.value)}
-                                className="h-12 w-full rounded-none border-4 border-black bg-white px-3 text-base font-bold text-neo-ink focus-visible:border-black focus-visible:bg-neo-secondary focus-visible:ring-0 focus-visible:shadow-neo-sm sm:h-14"
-                              >
-                                <option value="contributor">Contributor</option>
-                                <option value="lead">Lead</option>
-                                <option value="viewer">Viewer</option>
-                              </select>
-                            </div>
                           </>
                         )}
                         {!isRegister && (

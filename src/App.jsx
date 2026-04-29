@@ -92,21 +92,6 @@ function Workspace({ room, token, user, onLogout, onBack }) {
       <div className="pointer-events-none absolute inset-0 bg-neo-grid opacity-40 z-0" />
       <div className="pointer-events-none absolute inset-0 bg-neo-dots opacity-15 z-0" />
 
-      {/* Desktop Logout Button */}
-      <div className="hidden md:block absolute top-6 right-[400px] z-50">
-        <button
-          onClick={onBack}
-          className="mr-2 border-4 border-black bg-neo-secondary px-4 py-2 font-black uppercase text-xs shadow-neo-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-        >
-          Back
-        </button>
-        <button 
-          onClick={onLogout}
-          className="border-4 border-black bg-red-500 px-4 py-2 font-black uppercase text-xs shadow-neo-sm hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-        >
-          Logout
-        </button>
-      </div>
 
       {/* Top Mobile Header (only visible on small screens) */}
       <div className="md:hidden flex items-center justify-between border-b-4 border-black bg-neo-white px-4 py-3 z-50 shadow-neo-sm relative h-[68px]">
@@ -141,6 +126,21 @@ function Workspace({ room, token, user, onLogout, onBack }) {
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
         className="hidden md:flex absolute md:relative top-[68px] md:top-0 left-0 w-full md:w-80 h-[calc(100vh-68px)] md:h-screen flex-shrink-0 flex-col border-r-4 md:border-black bg-neo-white z-40 md:z-10 shadow-neo-xl md:shadow-none"
       >
+        {/* Desktop Controls Header */}
+        <div className="hidden md:flex items-center gap-2 p-4 border-b-4 border-black bg-neo-canvas">
+          <button
+            onClick={onBack}
+            className="flex-1 border-4 border-black bg-neo-secondary px-3 py-1.5 font-black uppercase text-[10px] shadow-neo-sm hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none transition-all"
+          >
+            Back
+          </button>
+          <button 
+            onClick={onLogout}
+            className="flex-1 border-4 border-black bg-red-500 px-3 py-1.5 font-black uppercase text-[10px] shadow-neo-sm hover:translate-x-0.5 hover:translate-y-0.5 hover:shadow-none transition-all"
+          >
+            Logout
+          </button>
+        </div>
         <EventLog roomId={room.id} token={token} addListener={addListener} connected={connected} />
         <RoleGuard userRole={effectiveRole} allowed={['lead']}>
           <RBACViolationFeed roomId={room.id} token={token} violations={violations} onClear={() => setViolations([])} />
@@ -285,17 +285,34 @@ export default function App() {
   });
   const [room, setRoom] = useState(null);
 
+  const [inviteAcceptedCount, setInviteAcceptedCount] = useState(0);
+
   useEffect(() => {
     if (!token) return;
-    const inviteToken = new URLSearchParams(window.location.search).get('invite');
+    
+    // Check both search and hash for invite token
+    const searchParams = new URLSearchParams(window.location.search);
+    let inviteToken = searchParams.get('invite');
+    
+    if (!inviteToken && window.location.hash.includes('?')) {
+      const hashQuery = window.location.hash.split('?')[1];
+      inviteToken = new URLSearchParams(hashQuery).get('invite');
+    }
+
     if (!inviteToken) return;
+
     fetch(`${API_URL}/rooms/invites/accept`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ token: inviteToken }),
+    }).then(res => {
+      if (res.ok) {
+        setInviteAcceptedCount(c => c + 1);
+      }
     }).finally(() => {
-      const next = `${window.location.origin}${window.location.pathname}${window.location.hash || ''}`;
-      window.history.replaceState({}, '', next);
+      // Clean up URL
+      const cleanHash = window.location.hash.split('?')[0];
+      window.history.replaceState({}, '', `${window.location.pathname}${cleanHash}`);
     });
   }, [token]);
 
@@ -317,7 +334,7 @@ export default function App() {
   }
 
   if (!room) {
-    return <RoomSelect token={token} user={user} onSelect={r => setRoom(r)} />;
+    return <RoomSelect key={inviteAcceptedCount} token={token} user={user} onSelect={r => setRoom(r)} />;
   }
 
   return <Workspace room={room} token={token} user={user} onLogout={logout} onBack={() => setRoom(null)} />;

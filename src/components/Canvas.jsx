@@ -44,76 +44,86 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
   const onMount = useCallback((editor) => {
     editorRef.current = editor;
     const ydoc = ydocRef.current;
-    const yArray = ydoc.getArray('shapes');
+    const yMap = ydoc.getMap('store');
 
-    // Dump existing changes if any arrived before mount
+    // Initial sync from Yjs to Tldraw
     suppressOutRef.current = true;
-    yArray.toArray().forEach((changeBatch) => {
-      changeBatch.forEach((change) => {
-        if (!change) return;
-        try {
-          if (change.type === 'added' || change.type === 'updated') {
-            if (editor.store.get(change.id)) {
-              editor.store.updateRecord(change.record);
-            } else {
-              editor.store.put([change.record]);
-            }
-          }
-          if (change.type === 'removed') {
-            editor.store.remove([change.id]);
-          }
-        } catch {
-          // ignore stale shape updates
-        }
-      });
+    const initialRecords = [];
+    yMap.forEach((record) => {
+      // Sync everything EXCEPT strictly local session state
+      if (record && !record.id.startsWith('instance') && !record.id.startsWith('camera') && !record.id.startsWith('pointer')) {
+        initialRecords.push(record);
+      }
     });
+    if (initialRecords.length > 0) {
+      editor.store.put(initialRecords);
+    }
     suppressOutRef.current = false;
 
+    // Monitor Yjs changes (Incoming)
     const observeY = (event) => {
-      suppressOutRef.current = true;
-      event.changes.delta.forEach((d) => {
-        if (d.insert) {
-          d.insert.forEach((change) => {
-            if (!change) return;
-            try {
-              if (change.type === 'added' || change.type === 'updated') {
-                if (editor.store.get(change.id)) {
-                  editor.store.updateRecord(change.record);
-                } else {
-                  editor.store.put([change.record]);
-                }
-              }
-              if (change.type === 'removed') {
-                editor.store.remove([change.id]);
-              }
-            } catch {
-              // ignore stale shape updates
-            }
-          });
+      if (suppressOutRef.current) return;
+      
+      const toPut = [];
+      const toRemove = [];
+      
+      event.changes.keys.forEach((change, key) => {
+        if (change.action === 'add' || change.action === 'update') {
+          const record = yMap.get(key);
+          // Sync everything EXCEPT strictly local session state
+          if (record && !record.id.startsWith('instance') && !record.id.startsWith('camera') && !record.id.startsWith('pointer')) {
+            toPut.push(record);
+          }
+        } else if (change.action === 'delete') {
+          if (!key.startsWith('instance') && !key.startsWith('camera') && !key.startsWith('pointer')) {
+            toRemove.push(key);
+          }
         }
       });
-      suppressOutRef.current = false;
-    };
-    yArray.observe(observeY);
 
+      if (toPut.length > 0 || toRemove.length > 0) {
+        suppressOutRef.current = true;
+        editor.store.mergeRemoteChanges(() => {
+          if (toPut.length > 0) editor.store.put(toPut);
+          if (toRemove.length > 0) editor.store.remove(toRemove);
+        });
+        setTimeout(() => { suppressOutRef.current = false; }, 0);
+      }
+    };
+    yMap.observe(observeY);
+
+    // Sync Tldraw changes to Yjs (Outgoing)
     const unsubscribe = editor.store.listen((entry) => {
       if (suppressOutRef.current) return;
-      const changes = [];
-      for (const [id, record] of Object.entries(entry.changes.added || {})) {
-        changes.push({ type: 'added', id, record });
-      }
-      for (const [id, record] of Object.entries(entry.changes.updated || {})) {
-        changes.push({ type: 'updated', id, record });
-      }
-      for (const id of Object.keys(entry.changes.removed || {})) {
-        changes.push({ type: 'removed', id });
-      }
-      if (changes.length) {
-        yArray.push(changes);
-        const update = Y.encodeStateAsUpdate(ydoc);
-        sendMessage({ type: 'yjs_update', room_id: roomId, update: arrayBufferToBase64(update) });
-      }
+      
+      ydoc.transact(() => {
+        // Sync everything EXCEPT strictly local session state
+        for (const record of Object.values(entry.changes.added)) {
+          if (!record.id.startsWith('instance') && !record.id.startsWith('camera') && !record.id.startsWith('pointer')) {
+            yMap.set(record.id, record);
+          }
+        }
+        
+        Object.entries(entry.changes.updated).forEach(([id, [from, to]]) => {
+          if (!id.startsWith('instance') && !id.startsWith('camera') && !id.startsWith('pointer')) {
+            yMap.set(id, to);
+          }
+        });
+        
+        for (const id of Object.keys(entry.changes.removed)) {
+          if (!id.startsWith('instance') && !id.startsWith('camera') && !id.startsWith('pointer')) {
+            yMap.delete(id);
+          }
+        }
+      });
     });
+
+    // Listen for Yjs updates to send to server (Incremental)
+    const onYUpdate = (update) => {
+      if (suppressOutRef.current) return;
+      sendMessage({ type: 'yjs_update', room_id: roomId, update: arrayBufferToBase64(update) });
+    };
+    ydoc.on('update', onYUpdate);
 
     const handlePointerMove = () => {
       const screen = editor.inputs.currentScreenPoint;
@@ -135,12 +145,14 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     if (container) container.addEventListener('contextmenu', handleContextMenu);
 
     return () => {
-      yArray.unobserve(observeY);
+      yMap.unobserve(observeY);
+      ydoc.off('update', onYUpdate);
       unsubscribe();
       window.removeEventListener('pointermove', handlePointerMove);
       if (container) container.removeEventListener('contextmenu', handleContextMenu);
     };
   }, [roomId, sendMessage, onCursorMove]);
+
 
   useEffect(() => {
     if (!addListener) return;
@@ -148,32 +160,8 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       if (msg.type === 'yjs_update' && msg.update) {
         try {
           const update = base64ToUint8Array(msg.update);
-          Y.applyUpdate(ydocRef.current, update);
-          
-          // Force push state to editor if it's already mounted when update arrives
-          if (editorRef.current) {
-            const editor = editorRef.current;
-            const yArray = ydocRef.current.getArray('shapes');
-            suppressOutRef.current = true;
-            yArray.toArray().forEach((changeBatch) => {
-              changeBatch.forEach((change) => {
-                if (!change) return;
-                try {
-                  if (change.type === 'added' || change.type === 'updated') {
-                    if (editor.store.get(change.id)) {
-                      editor.store.updateRecord(change.record);
-                    } else {
-                      editor.store.put([change.record]);
-                    }
-                  }
-                  if (change.type === 'removed') {
-                    editor.store.remove([change.id]);
-                  }
-                } catch {}
-              });
-            });
-            suppressOutRef.current = false;
-          }
+          // Yjs observer (observeY) handles the store update automatically
+          Y.applyUpdate(ydocRef.current, update, 'remote');
         } catch (e) {
           console.error('Yjs apply error', e);
         }

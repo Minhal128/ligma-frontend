@@ -25,12 +25,11 @@ export default function RoomSelect({ token, user, onSelect }) {
   }, [token]);
 
   const fetchLeadDashboard = useCallback(() => {
-    if (user.role !== 'lead') return;
     fetch(`${API_URL}/rooms/lead/dashboard`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then(setLeadDashboard)
       .catch(console.error);
-  }, [token, user.role]);
+  }, [token]);
 
   useEffect(() => {
     fetchRooms();

@@ -33,6 +33,9 @@ export default function InviteMembers({ roomId, token, userRole, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
 
   const isLead = userRole === 'lead';
 
@@ -83,6 +86,55 @@ export default function InviteMembers({ roomId, token, userRole, onClose }) {
       if (!res.ok) throw new Error(data.error);
       setSuccess(`Invited ${inviteEmail} as ${selectedRole}`);
       setInviteEmail('');
+      fetchMembers();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchUsers = async (q) => {
+    if (!q || q.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      const res = await fetch(`${API_URL}/rooms/users/search?q=${q}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        // Filter out users who are already members
+        const memberIds = members.map(m => m.id);
+        setSearchResults(data.filter(u => !memberIds.includes(u.id)));
+      }
+    } catch (e) {
+      console.error('Search error', e);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const inviteByUsername = async (username) => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch(`${API_URL}/rooms/${roomId}/invite`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` 
+        },
+        body: JSON.stringify({ username, role: selectedRole }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSuccess(`Added ${username} as ${selectedRole}`);
+      setSearchQuery('');
+      setSearchResults([]);
       fetchMembers();
     } catch (err) {
       setError(err.message);
@@ -243,47 +295,111 @@ export default function InviteMembers({ roomId, token, userRole, onClose }) {
 
           {/* Invite Section (Lead only) */}
           {isLead && (
-            <div className="border-4 border-black bg-neo-white p-4 shadow-neo-sm space-y-3">
+            <div className="border-4 border-black bg-neo-white p-4 shadow-neo-sm space-y-4">
               <div className="flex items-center gap-2">
                 <UserPlus className="size-5 stroke-[3px]" />
-                <span className="font-black uppercase tracking-tight">Invite Member</span>
+                <span className="font-black uppercase tracking-tight">Invite Collaborator</span>
               </div>
               
+              {/* Role Selection (Apply to both methods) */}
               <div className="space-y-2">
-                <div className="relative">
-                  <Input
-                    type="email"
-                    placeholder="Enter collaborator email..."
-                    value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
-                    className="h-12 rounded-none border-4 border-black bg-white text-base font-bold placeholder:opacity-40"
-                  />
+                <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-70">1. Select Role</p>
+                <div className="flex gap-2">
+                  {['contributor', 'viewer'].map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setSelectedRole(r)}
+                      className={`flex-1 border-4 border-black px-3 py-2 text-xs font-black uppercase tracking-widest transition-all ${
+                        selectedRole === r 
+                          ? 'bg-neo-accent shadow-neo-sm' 
+                          : 'bg-neo-muted hover:bg-neo-secondary'
+                      }`}
+                    >
+                      {roleLabels[r]}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Role Selection */}
-              <div className="flex gap-2">
-                {['contributor', 'viewer'].map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setSelectedRole(r)}
-                    className={`flex-1 border-4 border-black px-3 py-2 text-xs font-black uppercase tracking-widest transition-all ${
-                      selectedRole === r 
-                        ? 'bg-neo-accent shadow-neo-sm' 
-                        : 'bg-neo-muted hover:bg-neo-secondary'
-                    }`}
-                  >
-                    {roleLabels[r]}
-                  </button>
-                ))}
+              <div className="space-y-4 border-t-4 border-black pt-4">
+                <div className="space-y-2">
+                  <p className="text-[0.6rem] font-black uppercase tracking-widest opacity-70">2. Search Username</p>
+                  <div className="relative">
+                    <Input
+                      type="text"
+                      placeholder="Search existing users..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        searchUsers(e.target.value);
+                      }}
+                      className="h-10 rounded-none border-4 border-black bg-white text-sm font-bold placeholder:opacity-40"
+                    />
+                    {searching && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <motion.div
+                          animate={{ rotate: 360 }}
+                          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+                          className="h-4 w-4 border-2 border-black border-t-transparent rounded-full"
+                        />
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Search Results */}
+                  <AnimatePresence>
+                    {searchResults.length > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="border-4 border-black bg-neo-canvas max-h-40 overflow-y-auto shadow-neo-md"
+                      >
+                        {searchResults.map(u => (
+                          <div
+                            key={u.id}
+                            onClick={() => inviteByUsername(u.username)}
+                            className="flex items-center justify-between p-2 hover:bg-neo-secondary cursor-pointer border-b-2 border-black last:border-0"
+                          >
+                            <span className="font-bold text-xs uppercase tracking-tight">@{u.username}</span>
+                            <Button size="sm" className="h-6 rounded-none border-2 border-black bg-neo-accent text-[0.6rem] font-black uppercase">
+                              Add
+                            </Button>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t-2 border-black/10" />
+                  </div>
+                  <div className="relative flex justify-center text-[0.5rem] font-black uppercase tracking-[0.3em] text-black/40">
+                    <span className="bg-neo-white px-2">OR INVITE BY EMAIL</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <Input
+                      type="email"
+                      placeholder="Enter email address..."
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="h-10 flex-1 rounded-none border-4 border-black bg-white text-sm font-bold placeholder:opacity-40"
+                    />
+                    <Button
+                      onClick={inviteUser}
+                      disabled={loading || !inviteEmail.trim()}
+                      className="rounded-none border-4 border-black bg-neo-accent px-4 text-xs font-black uppercase tracking-widest shadow-neo-sm"
+                    >
+                      Invite
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <Button
-                onClick={inviteUser}
-                disabled={loading || !inviteEmail.trim()}
-                className="w-full rounded-none border-4 border-black bg-neo-accent px-3 text-xs font-black uppercase tracking-widest shadow-neo-sm"
-              >
-                Send Invite
-              </Button>
             </div>
           )}
 
@@ -296,7 +412,7 @@ export default function InviteMembers({ roomId, token, userRole, onClose }) {
             
             <div className="space-y-2">
               {members.map((member) => {
-                const RoleIcon = roleIcons[member.role];
+                const RoleIcon = roleIcons[member.role] || UserPlus;
                 return (
                   <div
                     key={member.id}
