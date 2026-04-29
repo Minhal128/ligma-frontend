@@ -149,6 +149,31 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         try {
           const update = base64ToUint8Array(msg.update);
           Y.applyUpdate(ydocRef.current, update);
+          
+          // Force push state to editor if it's already mounted when update arrives
+          if (editorRef.current) {
+            const editor = editorRef.current;
+            const yArray = ydocRef.current.getArray('shapes');
+            suppressOutRef.current = true;
+            yArray.toArray().forEach((changeBatch) => {
+              changeBatch.forEach((change) => {
+                if (!change) return;
+                try {
+                  if (change.type === 'added' || change.type === 'updated') {
+                    if (editor.store.get(change.id)) {
+                      editor.store.updateRecord(change.record);
+                    } else {
+                      editor.store.put([change.record]);
+                    }
+                  }
+                  if (change.type === 'removed') {
+                    editor.store.remove([change.id]);
+                  }
+                } catch {}
+              });
+            });
+            suppressOutRef.current = false;
+          }
         } catch (e) {
           console.error('Yjs apply error', e);
         }
