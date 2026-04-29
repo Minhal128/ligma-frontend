@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Loader2 } from 'lucide-react';
 import { useVoiceRecognition } from '../hooks/useVoiceRecognition.js';
 
-export default function VoiceToCanvas({ roomId, userId, cursorX, cursorY, sendMessage }) {
+export default function VoiceToCanvas({ roomId, userId, sendMessage }) {
   // Move hook calls to the very top
   const [isProcessing, setIsProcessing] = useState(false);
   
@@ -11,8 +11,8 @@ export default function VoiceToCanvas({ roomId, userId, cursorX, cursorY, sendMe
     if (!text.trim()) return;
     
     setIsProcessing(true);
-    const x = cursorX || 400;
-    const y = cursorY || 300;
+    const x = 500;
+    const y = 500;
     
     console.log('[VoiceToCanvas] Sending voice_node_create:', { text, x, y });
     sendMessage({
@@ -28,7 +28,7 @@ export default function VoiceToCanvas({ roomId, userId, cursorX, cursorY, sendMe
     setTimeout(() => {
       setIsProcessing(false);
     }, 1500);
-  }, [roomId, userId, cursorX, cursorY, sendMessage]);
+  }, [roomId, userId, sendMessage]);
 
   const { listening, interimTranscript, startListening, stopListening, supported } = useVoiceRecognition(handleTranscript);
 

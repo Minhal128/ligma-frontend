@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Tldraw, createShapeId } from 'tldraw';
 import 'tldraw/tldraw.css';
 import * as Y from 'yjs';
-import CursorOverlay from './CursorOverlay.jsx';
 import ClassificationBadge from './ClassificationBadge.jsx';
 import { useAIClassification } from '../hooks/useAIClassification.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -48,10 +47,9 @@ function StickyClassificationOverlayItem({ note, onClassification, frontendEnabl
   );
 }
 
-function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursorMove }) {
+function CanvasContent({ roomId, token, user, sendMessage, addListener }) {
   const editorRef = useRef(null);
   const ydocRef = useRef(new Y.Doc());
-  const [cursors, setCursors] = useState([]);
   const [showAclModal, setShowAclModal] = useState(false);
   const [aclNodeId, setAclNodeId] = useState(null);
   const [aclConfig, setAclConfig] = useState({ lead: 'write', contributor: 'write', viewer: 'read' });
@@ -69,7 +67,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     // Initial sync from Yjs to Tldraw
     const initialRecords = [];
     yMap.forEach((record) => {
-      // Sync everything EXCEPT strictly local session state
       if (record && !record.id.startsWith('instance') && !record.id.startsWith('camera') && !record.id.startsWith('pointer')) {
         initialRecords.push(record);
       }
@@ -82,7 +79,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
 
     // Monitor Yjs changes (Incoming)
     const observeY = (event) => {
-      // If the change came from our own local Tldraw sync, ignore it to avoid loops
       if (event.transaction.origin === 'local-sync') return;
       
       const toPut = [];
@@ -91,7 +87,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       event.changes.keys.forEach((change, key) => {
         if (change.action === 'add' || change.action === 'update') {
           const record = yMap.get(key);
-          // Sync everything EXCEPT strictly local session state
           if (record && !record.id.startsWith('instance') && !record.id.startsWith('camera') && !record.id.startsWith('pointer')) {
             toPut.push(record);
           }
@@ -113,23 +108,19 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
 
     // Sync Tldraw changes to Yjs (Outgoing)
     const unsubscribe = editor.store.listen((entry) => {
-      // If this change came from our own observeY (mergeRemoteChanges), ignore it
       if (entry.source === 'remote') return;
       
       ydoc.transact(() => {
-        // Sync everything EXCEPT strictly local session state
         for (const record of Object.values(entry.changes.added)) {
           if (!record.id.startsWith('instance') && !record.id.startsWith('camera') && !record.id.startsWith('pointer')) {
             yMap.set(record.id, record);
           }
         }
-        
         Object.entries(entry.changes.updated).forEach(([id, [from, to]]) => {
           if (!id.startsWith('instance') && !id.startsWith('camera') && !id.startsWith('pointer')) {
             yMap.set(id, to);
           }
         });
-        
         for (const id of Object.keys(entry.changes.removed)) {
           if (!id.startsWith('instance') && !id.startsWith('camera') && !id.startsWith('pointer')) {
             yMap.delete(id);
@@ -138,19 +129,12 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       }, 'local-sync');
     });
 
-    // Listen for Yjs updates to send to server (Incremental)
+    // Listen for Yjs updates to send to server
     const onYUpdate = (update, origin) => {
-      // Only send updates that originated locally
       if (origin === 'remote') return;
       sendMessage({ type: 'yjs_update', room_id: roomId, update: arrayBufferToBase64(update) });
     };
     ydoc.on('update', onYUpdate);
-
-    const handlePointerMove = () => {
-      const screen = editor.inputs.currentScreenPoint;
-      onCursorMove(screen.x, screen.y);
-    };
-    window.addEventListener('pointermove', handlePointerMove);
 
     const refreshStickyNotes = () => {
       const shapes = editor.getCurrentPageShapes();
@@ -188,20 +172,18 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         setShowAclModal(true);
       }
     };
-    const container = document.querySelector('.tl-canvas');
-    if (container) container.addEventListener('contextmenu', handleContextMenu);
+    const container = editor.getContainer();
+    container.addEventListener('contextmenu', handleContextMenu);
 
     return () => {
       yMap.unobserve(observeY);
       ydoc.off('update', onYUpdate);
       unsubscribe();
       unlistenStore?.();
-      window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('resize', refreshStickyNotes);
-      if (container) container.removeEventListener('contextmenu', handleContextMenu);
+      container.removeEventListener('contextmenu', handleContextMenu);
     };
-  }, [roomId, sendMessage, onCursorMove]);
-
+  }, [roomId, sendMessage]);
 
   useEffect(() => {
     if (!addListener) return;
@@ -209,7 +191,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
       if (msg.type === 'yjs_update' && msg.update) {
         try {
           const update = base64ToUint8Array(msg.update);
-          // Yjs observer (observeY) handles the store update automatically
           Y.applyUpdate(ydocRef.current, update, 'remote');
         } catch (e) {
           console.error('Yjs apply error', e);
@@ -223,23 +204,20 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
             editor.createShape({
               id,
               type: act.shape === 'note' ? 'note' : 'geo',
-              x: act.x || 400,
-              y: act.y || 400,
+              x: act.x || 500,
+              y: act.y || 500,
               props: {
                 text: act.content || '',
                 color: act.color || 'blue',
                 ...(act.shape === 'geo' ? { geo: act.props?.geo || 'rectangle' } : {})
               }
             });
-            // Select the new shape so subsequent "write" commands work
             editor.select(id);
           }
           else if (act.type === 'modify') {
-            // Find target shape by description
             const allShapes = editor.getCurrentPageShapes();
             const selectedShapes = editor.getSelectedShapes();
             const targetDesc = act.target?.toLowerCase();
-            
             let target = null;
             if (targetDesc) {
               target = allShapes.find(s => {
@@ -251,7 +229,6 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
             } else if (selectedShapes.length > 0) {
               target = selectedShapes[0];
             }
-
             if (target) {
               editor.updateShape({
                 id: target.id,
@@ -267,34 +244,21 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
             const allShapes = editor.getCurrentPageShapes();
             const selectedShapes = editor.getSelectedShapes();
             const targetDesc = act.target?.toLowerCase();
-            
             let target = null;
             if (targetDesc) {
               target = allShapes.find(s => s.props.text?.toLowerCase().includes(targetDesc));
             } else if (selectedShapes.length > 0) {
               target = selectedShapes[0];
             }
-            
             if (target) editor.deleteShape(target.id);
           }
-        });
-      }
-      if (msg.type === 'cursor_update') {
-        setCursors(prev => {
-          const others = prev.filter(c => c.user_id !== msg.user_id);
-          return [...others, { user_id: msg.user_id, x: msg.x, y: msg.y, color: msg.color, username: msg.username }];
         });
       }
     });
   }, [addListener]);
 
   const saveAcl = () => {
-    sendMessage({
-      type: 'node_acl_set',
-      room_id: roomId,
-      node_id: aclNodeId,
-      acl: aclConfig,
-    });
+    sendMessage({ type: 'node_acl_set', room_id: roomId, node_id: aclNodeId, acl: aclConfig });
     setShowAclModal(false);
   };
 
@@ -303,17 +267,12 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     const editor = editorRef.current;
     const shape = editor.getShape(shapeId);
     if (!shape?.props) return;
-
     const current = shape.props.aiTag;
     if (current && current.type === classification.type && current.confidence === classification.confidence) return;
-
     editor.updateShape({
       id: shapeId,
       type: shape.type,
-      props: {
-        ...shape.props,
-        aiTag: classification,
-      },
+      props: { ...shape.props, aiTag: classification },
     });
   }, []);
 
@@ -321,43 +280,25 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
 
   return (
     <div className="relative w-full h-full">
-      <Tldraw
-        onMount={onMount}
-        autoFocus
-        className="bg-transparent"
-      />
+      <Tldraw onMount={onMount} autoFocus className="bg-transparent" />
       <button
         type="button"
         onClick={() => setShowAIPanel((s) => !s)}
-        className={`absolute bottom-20 right-4 z-30 border-4 border-black px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm ${
-          'bg-neo-secondary text-black'
-        }`}
+        className="absolute bottom-20 right-4 z-30 border-4 border-black bg-neo-secondary px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm text-black"
       >
         AI ON {taggedCount}/{stickyNotesForAI.length}
       </button>
       {showAIPanel && (
         <div className="absolute bottom-36 right-4 z-30 w-64 border-4 border-black bg-neo-white p-3 shadow-neo-lg">
           <p className="text-xs font-black uppercase tracking-widest">AI Classification</p>
-          <p className="mt-2 text-[10px] font-bold uppercase">
-            Mode: {aiModeLabel}
-          </p>
-          {!frontendAIEnabled && (
-            <p className="mt-1 text-[10px] font-bold uppercase">Using backend OpenAI tags from realtime sync</p>
-          )}
-          <p className="mt-2 text-[10px] font-bold uppercase">Tagged Notes: {taggedCount}/{stickyNotesForAI.length}</p>
-          <div className="mt-2 text-[10px] font-bold uppercase space-y-1">
-            <p>✅ Task</p>
-            <p>🔵 Decision</p>
-            <p>❓ Question</p>
-            <p>📎 Reference</p>
-          </div>
+          <p className="mt-2 text-[10px] font-bold uppercase">Mode: {aiModeLabel}</p>
+          {!frontendAIEnabled && <p className="mt-1 text-[10px] font-bold uppercase">Using backend tags</p>}
+          <p className="mt-2 text-[10px] font-bold uppercase">Tagged: {taggedCount}/{stickyNotesForAI.length}</p>
         </div>
       )}
       {stickyNotesForAI.map((note) => (
         <StickyClassificationOverlayItem key={note.id} note={note} onClassification={persistClassification} frontendEnabled={frontendAIEnabled} />
       ))}
-      <CursorOverlay cursors={cursors} />
-
       <AnimatePresence>
         {showAclModal && (
           <motion.div
@@ -374,20 +315,13 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
               onClick={(e) => e.stopPropagation()}
             >
               <Card className="glass-panel w-96 shadow-2xl border-primary/30">
-                <CardHeader>
-                  <CardTitle>Set Permissions</CardTitle>
-                </CardHeader>
+                <CardHeader><CardTitle>Set Permissions</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
                   {['lead', 'contributor', 'viewer'].map(role => (
                     <div key={role} className="flex items-center justify-between">
                       <span className="text-sm font-medium capitalize">{role}</span>
-                      <Select
-                        value={aclConfig[role]}
-                        onValueChange={value => setAclConfig(prev => ({ ...prev, [role]: value }))}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Select value={aclConfig[role]} onValueChange={value => setAclConfig(prev => ({ ...prev, [role]: value }))}>
+                        <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="read">Read</SelectItem>
                           <SelectItem value="comment">Comment</SelectItem>
@@ -397,12 +331,8 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
                     </div>
                   ))}
                   <div className="flex gap-2 pt-4">
-                    <Button variant="outline" onClick={() => setShowAclModal(false)} className="flex-1">
-                      Cancel
-                    </Button>
-                    <Button onClick={saveAcl} className="flex-1">
-                      Save
-                    </Button>
+                    <Button variant="outline" onClick={() => setShowAclModal(false)} className="flex-1">Cancel</Button>
+                    <Button onClick={saveAcl} className="flex-1">Save</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -414,7 +344,7 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
   );
 }
 
-export default function Canvas({ roomId, token, user, sendMessage, addListener, onCursorMove }) {
+export default function Canvas({ roomId, token, user, sendMessage, addListener }) {
   return (
     <div className="w-full h-full">
       <CanvasContent
@@ -423,7 +353,6 @@ export default function Canvas({ roomId, token, user, sendMessage, addListener, 
         user={user}
         sendMessage={sendMessage}
         addListener={addListener}
-        onCursorMove={onCursorMove}
       />
     </div>
   );
