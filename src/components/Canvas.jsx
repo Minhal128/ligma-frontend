@@ -34,8 +34,8 @@ function base64ToUint8Array(base64) {
   return bytes;
 }
 
-function StickyClassificationOverlayItem({ note, onClassification }) {
-  const { classification, isClassifying } = useAIClassification(note.id, note.text);
+function StickyClassificationOverlayItem({ note, onClassification, frontendEnabled }) {
+  const { classification, isClassifying } = useAIClassification(note.id, note.text, frontendEnabled);
 
   useEffect(() => {
     if (classification) onClassification(note.id, classification);
@@ -57,7 +57,10 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
   const [aclConfig, setAclConfig] = useState({ lead: 'write', contributor: 'write', viewer: 'read' });
   const [stickyNotesForAI, setStickyNotesForAI] = useState([]);
   const [showAIPanel, setShowAIPanel] = useState(false);
+  const hasOpenAIKey = Boolean(import.meta.env.VITE_OPENAI_API_KEY);
   const hasAnthropicKey = Boolean(import.meta.env.VITE_ANTHROPIC_API_KEY);
+  const frontendAIEnabled = hasOpenAIKey || hasAnthropicKey;
+  const aiModeLabel = hasOpenAIKey ? 'OpenAI + Backend' : hasAnthropicKey ? 'Claude + Backend' : 'Backend OpenAI';
 
   const onMount = useCallback((editor) => {
     editorRef.current = editor;
@@ -328,17 +331,20 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         type="button"
         onClick={() => setShowAIPanel((s) => !s)}
         className={`absolute bottom-20 right-4 z-30 border-4 border-black px-3 py-2 text-[10px] font-black uppercase tracking-widest shadow-neo-sm ${
-          hasAnthropicKey ? 'bg-neo-secondary text-black' : 'bg-neo-accent text-black'
+          'bg-neo-secondary text-black'
         }`}
       >
-        AI {hasAnthropicKey ? `${taggedCount}/${stickyNotesForAI.length}` : 'OFF'}
+        AI ON {taggedCount}/{stickyNotesForAI.length}
       </button>
       {showAIPanel && (
         <div className="absolute bottom-36 right-4 z-30 w-64 border-4 border-black bg-neo-white p-3 shadow-neo-lg">
           <p className="text-xs font-black uppercase tracking-widest">AI Classification</p>
           <p className="mt-2 text-[10px] font-bold uppercase">
-            {hasAnthropicKey ? 'Claude active (2s debounce after typing)' : 'Set VITE_ANTHROPIC_API_KEY in frontend env'}
+            Mode: {aiModeLabel}
           </p>
+          {!frontendAIEnabled && (
+            <p className="mt-1 text-[10px] font-bold uppercase">Using backend OpenAI tags from realtime sync</p>
+          )}
           <p className="mt-2 text-[10px] font-bold uppercase">Tagged Notes: {taggedCount}/{stickyNotesForAI.length}</p>
           <div className="mt-2 text-[10px] font-bold uppercase space-y-1">
             <p>✅ Task</p>
@@ -349,7 +355,7 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
         </div>
       )}
       {stickyNotesForAI.map((note) => (
-        <StickyClassificationOverlayItem key={note.id} note={note} onClassification={persistClassification} />
+        <StickyClassificationOverlayItem key={note.id} note={note} onClassification={persistClassification} frontendEnabled={frontendAIEnabled} />
       ))}
       <CursorOverlay cursors={cursors} />
 
