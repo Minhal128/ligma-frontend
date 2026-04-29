@@ -46,6 +46,29 @@ function CanvasContent({ roomId, token, user, sendMessage, addListener, onCursor
     const ydoc = ydocRef.current;
     const yArray = ydoc.getArray('shapes');
 
+    // Dump existing changes if any arrived before mount
+    suppressOutRef.current = true;
+    yArray.toArray().forEach((changeBatch) => {
+      changeBatch.forEach((change) => {
+        if (!change) return;
+        try {
+          if (change.type === 'added' || change.type === 'updated') {
+            if (editor.store.get(change.id)) {
+              editor.store.updateRecord(change.record);
+            } else {
+              editor.store.put([change.record]);
+            }
+          }
+          if (change.type === 'removed') {
+            editor.store.remove([change.id]);
+          }
+        } catch {
+          // ignore stale shape updates
+        }
+      });
+    });
+    suppressOutRef.current = false;
+
     const observeY = (event) => {
       suppressOutRef.current = true;
       event.changes.delta.forEach((d) => {

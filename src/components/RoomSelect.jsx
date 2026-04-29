@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,12 +16,39 @@ export default function RoomSelect({ token, user, onSelect }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
+  const fetchRooms = useCallback(() => {
     fetch(`${API_URL}/rooms`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(setRooms)
       .catch(console.error);
   }, [token]);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
+
+  useEffect(() => {
+    const wsUrl = (() => {
+      if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL;
+      if (import.meta.env.PROD) return `wss://${window.location.host}/ws`;
+      return 'ws://localhost:4000/ws';
+    })();
+    const ws = new WebSocket(wsUrl);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'join_lobby', token }));
+    };
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'room_created') {
+          fetchRooms();
+        }
+      } catch (e) {}
+    };
+    return () => {
+      ws.close();
+    };
+  }, [token, fetchRooms]);
 
   const createRoom = async () => {
     if (!newName.trim()) return;
