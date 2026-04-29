@@ -26,7 +26,6 @@ function Workspace({ room, token, user, onLogout, onBack }) {
   const [conflicts, setConflicts] = useState(new Map());
   const [violations, setViolations] = useState([]);
   const [members, setMembers] = useState([]);
-  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const effectiveRole = room.my_role || user.role;
 
   useEffect(() => {
@@ -52,20 +51,7 @@ function Workspace({ room, token, user, onLogout, onBack }) {
       .catch(console.error);
   }, [room.id, token]);
 
-  const throttleRef = useRef(0);
-  const lastCursorSentRef = useRef({ x: null, y: null });
-  const handleCursorMove = (x, y) => {
-    setCursorPos({ x, y });
-    const roundedX = Math.round(x);
-    const roundedY = Math.round(y);
-    if (lastCursorSentRef.current.x === roundedX && lastCursorSentRef.current.y === roundedY) return;
-    const now = Date.now();
-    if (now - throttleRef.current > 66) {
-      throttleRef.current = now;
-      lastCursorSentRef.current = { x: roundedX, y: roundedY };
-      sendMessage({ type: 'cursor_move', room_id: room.id, x: roundedX, y: roundedY, user_id: user.user_id, username: user.username });
-    }
-  };
+
 
   const [activeSidebarOffset, setActiveSidebarOffset] = useState(300);
   useEffect(() => {
@@ -169,7 +155,6 @@ function Workspace({ room, token, user, onLogout, onBack }) {
             user={user}
             sendMessage={sendMessage}
             addListener={addListener}
-            onCursorMove={handleCursorMove}
           />
           <ConflictHeatmap conflicts={conflicts} visible={showConflictMap} />
         </div>
@@ -187,8 +172,6 @@ function Workspace({ room, token, user, onLogout, onBack }) {
                <VoiceToCanvas
                 roomId={room.id}
                 userId={user.user_id}
-                cursorX={cursorPos.x}
-                cursorY={cursorPos.y}
                 sendMessage={sendMessage}
               />
             </div>
